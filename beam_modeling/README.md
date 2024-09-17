@@ -1,6 +1,6 @@
 # Proton Pencil Beam Modeling
 
-This repository contains code that automates proton pencil beam modeling by generating key parameters required for dose calculations. The modeling process uses data from pristine Bragg peaks to build lookup tables and fitting functions for dose and beam characteristics.
+The modeling process currently uses data from pristine Bragg peaks computed using an existing pencil beam model to build lookup tables for each proton beam energy, which are saved as `.csv` files.
 
 ## Overview
 
@@ -9,13 +9,20 @@ Each nominal beam energy is modeled using the following three components:
 2. **σ_mcs (Multiple Coulomb Scattering) vs. z_w**: A lookup table representing lateral spot broadening due to scattering as a function of depth in water.
 3. **σ_air (Air Scatter)**: A quadratic function describing the lateral spread of the proton beam as a function of distance from the effective proton source.
 
-These components were modeled based on pristine Bragg peaks computed using Monte Carlo (MC) simulations in a clinical Treatment Planning System (TPS), RayStation 2023B (RaySearch Labs, Stockholm, Sweden). The system was configured to match the synchrotron-based Probeat PBS delivery system (Hitachi, Tokyo, Japan), with 98 discrete energies ranging from 70.2 MeV to 228.7 MeV.
+These components were modeled based on pristine Bragg peaks computed using Monte Carlo (MC) simulations in a clinical Treatment Planning System (TPS), RayStation 2023B (RaySearch Labs, Stockholm, Sweden). The default model was configured to match the synchrotron-based Probeat PBS delivery system (Hitachi, Tokyo, Japan), with 98 discrete energies ranging from 70.2 MeV to 228.7 MeV.
+
+## Requirements
+
+- Existing planning system or beam model capable of exporting physical dose grids.
+- Digital water phantom - note that the lookup table script assumes that the material is water (i.e. RLSP = 1.0). It is recommended to override the phantom with water to ensure this is the case. 
+- Python 3.x
+- Numpy, Pandas for data processing
+- Matplotlib for plotting (optional)
 
 ## Modeling Workflow
 
 ### Pristing Bragg Peak Calculation
 
-1. **Pristine Bragg Peaks Generation**: 
    - Pristine Bragg peaks were generated for each energy using a digital water phantom in the TPS with 1 mm isotropic dose grid, 0.5% statistical uncertainty, and 0.2 MU per spot.
    - For each energy, Bragg peaks were computed at multiple effective SSDs (isocenter positions) for σ_air fitting.
    - ```impt_compute_spots.py``` is a Python script that can be run in RayStation to automate the dose calcualation and physical dose grid export for a list of energies. Note that this script needs to be edited to match the digital phantom, plan, and energy list for your beam model. 
@@ -39,14 +46,7 @@ These components were modeled based on pristine Bragg peaks computed using Monte
 4. **Multiple Coulomb Scattering (σ_mcs) Fitting**:
    - The lookup table for σ_mcs was computed by averaging the difference between σ_c at different depths and σ_c at the reference depth (z_(w,ref)).
 
-### Requirements
-
-- Python 3.x
-- RayStation 2023B or similar TPS capable of exporting physical dose grids
-- Numpy, Pandas for data processing
-- Matplotlib for plotting (optional)
-
-### Running the Script
+### Running the Lookup Table Script
 
 1. Ensure the TPS dose grids for all energies are exported to a designated directory.
 2. Edit `energies.csv` to contain the energy labels and complete path to the directories containing the physical dose grids exported from RayStation in the `dcm_directory` column.
@@ -55,3 +55,5 @@ These components were modeled based on pristine Bragg peaks computed using Monte
 ```bash
 python impt_lookup_tables.py "directory-containing-energies.csv"
 ```
+4. The results, including the updated `energies.csv` file should be placed in `DoseCUDA/lookuptables/`.
+5. Note that the distance from isocenter to the x and y scanning magnets are defined in `dose_kernels/model_params.h` and should also be updated to match your machine before re-building DoseCUDA with new lookup tables. 
