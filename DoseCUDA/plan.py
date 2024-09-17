@@ -1,0 +1,178 @@
+import numpy as np
+import SimpleITK as sitk
+import pydicom as pyd
+
+
+class DoseGrid:
+
+    def __init__(self):
+        self.origin = np.array([0.0, 0.0, 0.0])
+        self.spacing = np.array([0.0, 0.0, 0.0])
+        self.size = np.array([0, 0, 0])
+        self.HU = []
+        self.dose = []
+        self.beam_doses = []
+        self.FrameOfReferenceUID = ""
+
+    def loadCTNRRD(self, ct_path):
+        fr = sitk.ImageFileReader()
+        fr.SetFileName(ct_path)
+        ct_img = fr.Execute()
+
+        self.origin = np.array(ct_img.GetOrigin())
+        self.spacing = np.array(ct_img.GetSpacing())
+        self.HU = np.array(sitk.GetArrayFromImage(ct_img), dtype=np.single)
+        self.size = np.array(self.HU.shape)
+
+    def loadCTDCM(self, ct_path):
+        reader = sitk.ImageSeriesReader()
+        dicom_names = reader.GetGDCMSeriesFileNames(ct_path)
+        reader.SetFileNames(dicom_names)
+        ct_img = reader.Execute()
+
+        self.origin = np.array(ct_img.GetOrigin())
+        self.spacing = np.array(ct_img.GetSpacing())
+        self.HU = np.array(sitk.GetArrayFromImage(ct_img), dtype=np.single)
+        self.size = np.array(self.HU.shape)
+
+    def resampleCTfromSpacing(self, spacing):
+
+        HU_img = sitk.GetImageFromArray(self.HU)
+        HU_img.SetOrigin(self.origin)
+        HU_img.SetSpacing(self.spacing)
+
+        rf = sitk.ResampleImageFilter()
+        rf.SetOutputOrigin(self.origin)
+        sp_new = (spacing, spacing, spacing)
+        sz_new = (int(self.size[2] * self.spacing[0] / sp_new[0]),
+                  int(self.size[1] * self.spacing[1] / sp_new[1]),
+                  int(self.size[0] * self.spacing[2] / sp_new[2]))
+        rf.SetOutputSpacing(sp_new)
+        rf.SetSize(sz_new)
+
+        HU_resampled = rf.Execute(HU_img)
+        self.HU = np.array(sitk.GetArrayFromImage(HU_resampled), dtype=np.single)
+        
+        self.spacing = sp_new
+        self.size = np.array(self.HU.shape)
+
+    def resampleCTfromReferenceDose(self, ref_dose_path):
+
+        ref_dose = pyd.dcmread(ref_dose_path)
+        ref_spacing = np.array([float(ref_dose.PixelSpacing[0]), float(ref_dose.PixelSpacing[1]), float(ref_dose.SliceThickness)])
+        ref_origin = np.array(ref_dose.ImagePositionPatient)
+
+        ref_dose_img = sitk.GetImageFromArray(ref_dose.pixel_array)
+        ref_dose_img.SetOrigin(ref_origin)
+        ref_dose_img.SetSpacing(ref_spacing)
+
+        HU_img = sitk.GetImageFromArray(self.HU)
+        HU_img.SetOrigin(self.origin)
+        HU_img.SetSpacing(self.spacing)
+
+        rf = sitk.ResampleImageFilter()
+        rf.SetReferenceImage(ref_dose_img)
+
+        HU_resampled = rf.Execute(HU_img)
+
+        self.HU = np.array(sitk.GetArrayFromImage(HU_resampled), dtype=np.single)
+
+        self.size = np.array(self.HU.shape)
+        self.origin = ref_origin
+        self.spacing = ref_spacing
+
+    def writeDoseDCM(self, dose_path, ref_dose_path, dose_type="EFFECTIVE"):
+
+        if not dose_path.endswith(".dcm"):
+            raise Exception("Dose path must have .dcm extension")
+        else:
+            print("test")
+
+        if dose_type == "EFFECTIVE":
+            RBE = 1.1
+        elif dose_type == "PHYSICAL":
+            RBE = 1.0
+        else:
+            raise Exception("Unknown dose type: %s" % dose_type)
+
+        ref_dose = pyd.dcmread(ref_dose_path)
+        ref_dose.SeriesDescription = ref_dose.SeriesDescription + "_DoseCUDA"
+        ref_dose.DoseSummationType = "PLAN"
+        ref_dose.DoseType = dose_type
+        ref_dose.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = pyd.uid.generate_uid()
+        
+        dose_dcm = np.array(self.dose * 1000.0 * RBE, dtype=np.uint16)
+        ref_dose.PixelData = dose_dcm
+        ref_dose.DoseGridScaling = 0.001
+
+        ref_dose.save_as(dose_path)
+
+    def writeDoseNRRD(self, dose_path, individual_beams=False, dose_type="EFFECTIVE"):
+
+        if not dose_path.endswith(".nrrd"):
+            raise Exception("Dose path must have .nrrd extension")
+        
+        if dose_type == "EFFECTIVE":
+            RBE = 1.1
+        elif dose_type == "PHYSICAL":
+            RBE = 1.0
+        else:
+            raise Exception("Unknown dose type: %s" % dose_type)
+
+        fw = sitk.ImageFileWriter()
+        dose_img = sitk.GetImageFromArray(np.array(self.dose * RBE, dtype=np.single))
+        dose_img.SetOrigin(self.origin)
+        dose_img.SetSpacing(self.spacing)
+
+        if individual_beams:
+            for i, beam_dose in enumerate(self.beam_doses):
+                dose_img = sitk.GetImageFromArray(np.array(beam_dose * RBE, dtype=np.single))
+                dose_img.SetOrigin(self.origin)
+                dose_img.SetSpacing(self.spacing)
+                fw.SetFileName(dose_path.replace(".nrrd", "_beam%02i.nrrd" % (i+1)))
+                fw.Execute(dose_img)
+        else:
+            fw.SetFileName(dose_path)
+            fw.Execute(dose_img)
+
+    def writeCTNRRD(self, ct_path):
+
+        if not ct_path.endswith(".nrrd"):
+            raise Exception("CT path must have .nrrd extension")
+
+        fw = sitk.ImageFileWriter()
+        HU_img = sitk.GetImageFromArray(self.HU)
+        HU_img.SetOrigin(self.origin)
+        HU_img.SetSpacing(self.spacing)
+
+        fw.SetFileName(ct_path)
+        fw.Execute(HU_img)
+
+    def createCubePhantom(self, size=[138, 138, 138], spacing=3.0):
+        self.origin = np.array([-size[0] * spacing / 2.0, -size[1] * spacing / 2.0, -size[2] * spacing / 2.0])
+        self.spacing = np.array([spacing, spacing, spacing])
+        self.size = np.array(size)
+        edge = round(10.0 / spacing)
+        self.HU = np.ones(size, dtype=np.single) * -1000.0
+        self.HU[edge:-edge, edge:-edge, edge:-edge] = 0.0
+
+
+class Beam:
+
+    def __init__(self):
+        self.iso = np.array([0.0, 0.0, 0.0], dtype=np.single)
+        self.gantry_angle = 0.0
+        self.collimator_angle = 0.0
+        self.couch_angle = 0.0
+
+
+class Plan:
+
+    def __init__(self):
+        self.n_beams = 0
+        self.n_fractions = 1
+        self.beam_list = []
+
+    def addBeam(self, beam):
+        self.beam_list.append(beam)
+        self.n_beams += 1
