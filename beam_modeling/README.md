@@ -53,5 +53,5 @@ These components were modeled based on pristine Bragg peaks computed using Monte
 3. Run the script to generate the IDD lookup tables, σ_mcs, and σ_air parameters as `.csv` files.
 
 ```bash
-python pencil_beam_modeling.py "directory-containing-energies.csv"
+python impt_lookup_tables.py "directory-containing-energies.csv"
 ```
