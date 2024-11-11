@@ -60,7 +60,13 @@ static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
 
 	try {
 
-		DoseClass dose_obj = DoseClass(PyArray_DIMS(density_array), spacing);
+		size_t dims[3] = {
+			(size_t)PyArray_DIMS(density_array)[0],
+			(size_t)PyArray_DIMS(density_array)[1],
+			(size_t)PyArray_DIMS(density_array)[2],
+		};
+
+		DoseClass dose_obj = DoseClass(dims, spacing);
 		HostPointer<float> WETArray(dose_obj.num_voxels);
 
 		dose_obj.DensityArray = pyarray_as<float>(density_array);
@@ -157,7 +163,13 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 	try {
 
 		// Create dose
-		DoseClass dose_obj = DoseClass(PyArray_DIMS(wet_array), density_spacing);
+		size_t dims[3] = {
+			(size_t)PyArray_DIMS(wet_array)[0],
+			(size_t)PyArray_DIMS(wet_array)[1],
+			(size_t)PyArray_DIMS(wet_array)[2],
+		};
+
+		DoseClass dose_obj = DoseClass(dims, density_spacing);
 		HostPointer<float> DoseArray(dose_obj.num_voxels);
 
 		dose_obj.DoseArray = DoseArray.get();

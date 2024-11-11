@@ -7,7 +7,6 @@
 #include <iostream>
 #include "device_launch_parameters.h"
 #include <stdlib.h>
-#include <unistd.h>
 #include <math_constants.h>
 #include "./BaseClasses.h"
 

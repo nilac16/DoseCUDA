@@ -6,6 +6,10 @@
 #include <cmath>
 #include "./model_params.h"
 
+#ifndef M_PI
+#	define M_PI 3.14159265358979323846
+#endif
+
 #define LUT_LENGTH 400
 
 typedef struct {
@@ -93,10 +97,11 @@ class DoseClass {
         float * DensityArray;
         float * WETArray;
 
-        DoseClass(long int * img_sz, float spacing);
+        DoseClass(size_t img_sz[], float spacing);
 
         DoseClass(DoseClass * h_dose);
 
 };
+
 
 #endif

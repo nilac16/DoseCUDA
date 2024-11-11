@@ -2,7 +2,7 @@
 #include "MemoryClasses.h"
 
 
-DoseClass::DoseClass(long int * img_sz, float spacing) {
+DoseClass::DoseClass(size_t img_sz[], float spacing) {
 
 	this->img_sz.i = img_sz[2];
 	this->img_sz.j = img_sz[1];
@@ -33,8 +33,10 @@ BeamClass::BeamClass(float * iso, float gantry_angle, float couch_angle){
 	//machine angles in radians
 	float ga = gantry_angle * M_PI / 180.0f;
 	float ta = couch_angle * M_PI / 180.0f;
-	sincosf(ga, &this->singa, &this->cosga);
-	sincosf(ta, &this->sinta, &this->costa);
+	this->singa = sinf(ga);
+	this->cosga = cosf(ga);
+	this->sinta = sinf(ta);
+	this->costa = cosf(ta);
 
 	//gantry rotation - rotate about z-axis
 	float xg, yg;
