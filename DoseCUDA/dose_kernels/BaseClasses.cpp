@@ -28,19 +28,23 @@ BeamClass::BeamClass(float * iso, float gantry_angle, float couch_angle){
 	this->iso.z = iso[2];
 	this->gantry_angle = gantry_angle;
 	this->couch_angle = couch_angle;
+	this->collimator_angle = 0.0f;
 
 	//starting coordinate is [x, y, z] = [0.0, SAD, 0.0]
 	//machine angles in radians
 	float ga = gantry_angle * M_PI / 180.0f;
 	float ta = couch_angle * M_PI / 180.0f;
+	float ca = 0.0f;
 	this->singa = sinf(ga);
 	this->cosga = cosf(ga);
 	this->sinta = sinf(ta);
 	this->costa = cosf(ta);
+	this->sinca = 0.0f;
+	this->cosca = 1.0f;
 
 	//gantry rotation - rotate about z-axis
 	float xg, yg;
-	xg = -((VSADX + VSADY) / 2.0) * this->singa;
+	xg = -((VSADX + VSADY) / 2.0) * this->singa; 
 	yg = ((VSADX + VSADY) / 2.0) * this->cosga;
 	//zg = 0.0;
 
@@ -57,19 +61,65 @@ BeamClass::BeamClass(float * iso, float gantry_angle, float couch_angle){
 
 }
 
+
+BeamClass::BeamClass(float * iso, float gantry_angle, float couch_angle, float collimator_angle){
+
+	this->iso.x = iso[0];
+	this->iso.y = iso[1];
+	this->iso.z = iso[2];
+	this->gantry_angle = gantry_angle;
+	this->couch_angle = couch_angle;
+	this->collimator_angle = collimator_angle;
+
+	//starting coordinate is [x, y, z] = [0.0, SAD, 0.0]
+	//machine angles in radians
+	float ga = gantry_angle * M_PI / 180.0f;
+	float ta = couch_angle * M_PI / 180.0f;
+	float ca = collimator_angle * M_PI / 180.0f;
+	this->singa = sinf(ga);
+	this->cosga = cosf(ga);
+	this->sinta = sinf(ta);
+	this->costa = cosf(ta);
+	this->sinca = sinf(ca);
+	this->cosca = cosf(ca);
+
+	//gantry rotation - rotate about z-axis
+	float xg, yg;
+	xg = -PRIMARY_SOURCE_DISTANCE * this->singa; 
+	yg = PRIMARY_SOURCE_DISTANCE * this->cosga;
+	//zg = 0.0;
+
+	//table rotation - rotate about y-axis
+	float xt, yt, zt;
+	xt = xg * this->costa;
+	yt = yg;
+	zt = -xg * this->sinta;
+
+	//translate based on iso location in image
+	this->src.x = xt;
+	this->src.y = yt;
+	this->src.z = zt;
+
+}
+
+
 BeamClass::BeamClass(BeamClass * h_beam){
 
 	this->iso = h_beam->iso;
 	this->src = h_beam->src;
 	this->gantry_angle = h_beam->gantry_angle;
 	this->couch_angle = h_beam->couch_angle;
+	this->collimator_angle = h_beam->collimator_angle;
 	this->singa = h_beam->singa;
 	this->cosga = h_beam->cosga;
 	this->sinta = h_beam->sinta;
 	this->costa = h_beam->costa;
+	this->sinca = h_beam->sinca;
+	this->cosca = h_beam->cosca;
 	this->n_energies = h_beam->n_energies;
 	this->n_layers = h_beam->n_layers;
 	this->n_spots = h_beam->n_spots;
+	this->n_mlc_pairs = h_beam->n_mlc_pairs;
 	this->dvp_len = h_beam->dvp_len;
 	this->lut_len = h_beam->lut_len;
 

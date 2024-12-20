@@ -2,6 +2,7 @@ myvenv/
 CMakeFiles/
 test_build/
 test_phantom_output/
+local_tests/
 .vscode/
 dist/
 lib/

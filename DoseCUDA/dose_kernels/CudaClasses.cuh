@@ -29,6 +29,8 @@ class CudaBeam : public BeamClass{
 
         __device__ void unitVectorToSource(const PointXYZ * point_xyz, PointXYZ * uvec);
 
+        __device__ float distanceToSource(const PointXYZ * point_xyz);
+
 };
 
 class CudaDose : public DoseClass{

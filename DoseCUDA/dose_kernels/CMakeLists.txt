@@ -7,7 +7,8 @@ target_sources(${MODULE_NAME}
         dosemodule.cpp
         BaseClasses.cpp
         CudaClasses.cu
-        IMPTClasses.cu)
+        IMPTClasses.cu
+        IMRTClasses.cu)
 
 target_include_directories(${MODULE_NAME}
     PRIVATE

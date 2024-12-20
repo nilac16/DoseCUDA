@@ -48,6 +48,16 @@ typedef struct {
 
 } Layer;
 
+typedef struct {
+
+    float x1;
+    float x2;
+    float y_offset;
+    float y_width;
+
+} MLCPair;
+
+
 class BeamClass {
 
     public:
@@ -56,9 +66,11 @@ class BeamClass {
         PointXYZ src;
         float gantry_angle;
         float couch_angle;
+        float collimator_angle;
 
         float singa, cosga; // Cached gantry angle trig functions
         float sinta, costa; // Cached couch angle trig functions
+        float sinca, cosca; // Cached collimator angle trig functions
 
         int n_energies; // Total energies
 
@@ -67,6 +79,9 @@ class BeamClass {
 
         Spot * spots;   // All spots, sorted by energy ID
         int n_spots;    // Spot count
+
+        MLCPair * mlc;  // MLC leaf pairs
+        int n_mlc_pairs;    // Number of leaf pairs
 
         float * divergence_params;  // R80, energy, coefficients
         int dvp_len;    // Length including R80 + energy (stride)
@@ -78,11 +93,14 @@ class BeamClass {
 
         BeamClass(float * iso, float gantry_angle, float couch_angle);
 
+        BeamClass(float * iso, float gantry_angle, float couch_angle, float collimator_angle); 
+
         BeamClass(BeamClass * h_beam);
 
         void importLayers();
 
 };
+
 
 class DoseClass {
 

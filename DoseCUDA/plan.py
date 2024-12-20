@@ -59,7 +59,8 @@ class DoseGrid:
     def resampleCTfromReferenceDose(self, ref_dose_path):
 
         ref_dose = pyd.dcmread(ref_dose_path)
-        ref_spacing = np.array([float(ref_dose.PixelSpacing[0]), float(ref_dose.PixelSpacing[1]), float(ref_dose.SliceThickness)])
+        slice_thickness = float(ref_dose.GridFrameOffsetVector[1]) - float(ref_dose.GridFrameOffsetVector[0])
+        ref_spacing = np.array([float(ref_dose.PixelSpacing[0]), float(ref_dose.PixelSpacing[1]), slice_thickness])
         ref_origin = np.array(ref_dose.ImagePositionPatient)
 
         ref_dose_img = sitk.GetImageFromArray(ref_dose.pixel_array)

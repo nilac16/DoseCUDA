@@ -16,6 +16,17 @@ __device__ void CudaBeam::unitVectorToSource(const PointXYZ * point_xyz, PointXY
 	uvec->z = dz * r;
 }
 
+__device__ float CudaBeam::distanceToSource(const PointXYZ * point_xyz){
+	
+	float dx = this->src.x - point_xyz->x;
+	float dy = this->src.y - point_xyz->y;
+	float dz = this->src.z - point_xyz->z;
+
+	float r = norm3df(dx, dy, dz);
+
+	return r;
+
+}
 
 __host__ CudaDose::CudaDose(DoseClass * h_dose) : DoseClass(h_dose) {}
 
@@ -59,15 +70,15 @@ __device__ void CudaDose::pointXYZImageToHead(const PointXYZ * point_img, PointX
 
 	float sinx, cosx;
 
-	//table rotation - rotate about y-axis (negative direction)
+	//table rotation - rotate about y-axis
 	float xt, yt, zt;
-	sinx = beam->sinta;
+	sinx = -beam->sinta;
 	cosx = beam->costa;
 	xt = point_img->x * cosx + point_img->z * sinx;
 	yt = point_img->y;
 	zt = -point_img->x * sinx + point_img->z * cosx;
 
-	//gantry rotation - rotate about z-axis (negative direction)
+	//gantry rotation - rotate about z-axis
 	float xg, yg, zg;
 	sinx = -beam->singa;
 	cosx = beam->cosga;
@@ -75,33 +86,17 @@ __device__ void CudaDose::pointXYZImageToHead(const PointXYZ * point_img, PointX
 	yg = xt * sinx + yt * cosx;
 	zg = zt;
 
-	// //spot steering in z - rotate about x
-	// float xz, yz, zz;
-	// /* float z_rot = atan2f(spot->y, VSADY);
-	// sincosf(z_rot, &sinx, &cosx); */
+	//collimator rotation = rotate about y-axis
+	float xc, yc, zc;
+	sinx = -beam->sinca;
+	cosx = beam->cosca;
+	xc  = xg * cosx + zg * sinx;
+	yc = yg;
+	zc = -xg * sinx + zg * cosx;
 
-	// sincos_from_atan(spot->y, VSADY, &sinx, &cosx);
-	// yg = yg - VSADY;
-	// xz = xg;
-	// yz = yg * cosx - zg * sinx;
-	// zz = yg * sinx + zg * cosx;
-	// yz = yz + VSADY;
-
-	// //spot steering in x - rotate about z
-	// float xx, yx, zx;
-	// /* float x_rot = atan2f(spot->x, VSADX);
-	// sincosf(x_rot, &sinx, &cosx); */
-
-	// sincos_from_atan(spot->x, VSADX, &sinx, &cosx);
-	// yz = yz - VSADX;
-	// xx = xz * cosx - yz * sinx;
-	// yx = xz * sinx + yz * cosx;
-	// zx = zz;
-	// yx = yx + VSADX;
-
-	point_head->x = xg;
-	point_head->y = yg;
-	point_head->z = zg;
+	point_head->x = xc;
+	point_head->y = yc;
+	point_head->z = zc;
 
 }
 
@@ -109,41 +104,25 @@ __device__ void CudaDose::pointXYZHeadToImage(const PointXYZ * point_head, Point
 
 	float sinx, cosx;
 
-	// //spot steering in x - rotate about z
-	// float xx, yx, zx, y_;
-	// /* float x_rot = -atan2f(spot->x , VSADX);
-	// sincosf(x_rot, &sinx, &cosx); */
-	// sincos_from_atan(-spot->x, VSADX, &sinx, &cosx);
-	// y_ = point_head->y - VSADX;
-
-	// xx = point_head->x * cosx - y_ * sinx;
-	// yx = point_head->x * sinx + y_ * cosx;
-	// zx = point_head->z;
-
-	// yx = yx + VSADX - VSADY;
-
-	// //spot steering in z - rotate about x
-	// float xz, zz, yz;
-	// /* float z_rot = -atan2f(spot->y , VSADY);
-	// sincosf(z_rot, &sinx, &cosx); */
-	// sincos_from_atan(-spot->y, VSADY, &sinx, &cosx);
-	// xz = xx;
-	// yz = yx * cosx - zx * sinx;
-	// zz = yx * sinx + zx * cosx;
-
-	// yz = yz + VSADY;
-
 	float xz = point_head->x;
 	float yz = point_head->y;
 	float zz = point_head->z;
+
+	//collimator rotation = rotate about y-axis (again, negative direction)
+	float xc, yc, zc;
+	sinx = beam->sinca;
+	cosx = beam->cosca;
+	xc  = xz * cosx + zz * sinx;
+	yc = yz;
+	zc = -xz * sinx + zz * cosx;
 
 	//gantry rotation - rotate about z-axis (negative direction)
 	float xg, yg, zg;
 	sinx = beam->singa;
 	cosx = beam->cosga;
-	xg = xz * cosx - yz * sinx;
-	yg = xz * sinx + yz * cosx;
-	zg = zz;
+	xg = xc * cosx - yc * sinx;
+	yg = xc * sinx + yc * cosx;
+	zg = zc;
 
 	//table rotation - rotate about y-axis (negative direction)
 	float xt, yt, zt;

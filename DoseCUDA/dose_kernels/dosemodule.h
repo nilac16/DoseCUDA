@@ -15,4 +15,6 @@ extern void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_b
 
 extern void proton_spot_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
 
+extern void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
+
 #endif
