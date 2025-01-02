@@ -30,17 +30,19 @@ __device__ float CudaBeam::distanceToSource(const PointXYZ * point_xyz){
 
 __host__ CudaDose::CudaDose(DoseClass * h_dose) : DoseClass(h_dose) {}
 
-__device__ bool CudaDose::pointIJKWithinImage(const PointIJK * point_ijk) {
+// Inlined in CudaClasses.cuh
+/* __device__ bool CudaDose::pointIJKWithinImage(const PointIJK * point_ijk) {
 
 	return point_ijk->i < this->img_sz.i
 	    && point_ijk->j < this->img_sz.j
 		&& point_ijk->k < this->img_sz.k;
-}
+} */
 
-__device__ unsigned int CudaDose::pointIJKtoIndex(const PointIJK * point_ijk) {
+// Inlined in CudaClasses.cuh
+/* __device__ unsigned int CudaDose::pointIJKtoIndex(const PointIJK * point_ijk) {
 
 	return point_ijk->i + this->img_sz.i * (point_ijk->j + this->img_sz.j * point_ijk->k);
-}
+} */
 
 __device__ void CudaDose::pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * point_xyz, BeamClass * beam) {
 
@@ -50,12 +52,13 @@ __device__ void CudaDose::pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * p
 
 }
 
-__device__ void CudaDose::pointXYZtoIJK(const PointXYZ * point_xyz, PointIJK * point_ijk, BeamClass * beam) {
+// Inlined in CudaClasses.cuh
+/* __device__ void CudaDose::pointXYZtoIJK(const PointXYZ * point_xyz, PointIJK * point_ijk, BeamClass * beam) {
 
 	point_ijk->i = (int)roundf((point_xyz->x + beam->iso.x) / this->spacing);
 	point_ijk->j = (int)roundf((point_xyz->y + beam->iso.y) / this->spacing);
 	point_ijk->k = (int)roundf((point_xyz->z + beam->iso.z) / this->spacing);
-}
+} */
 
 /** sincos but with a value theoretically supplied to arctangent */
 __device__ void sincos_from_atan(float y, float x, float *sptr, float *cptr) {
@@ -169,5 +172,61 @@ __device__ float CudaDose::pointXYZDistanceToSource(const PointXYZ * point_img_x
 	float dz = beam->src.z - point_img_xyz->z;
 
 	return norm3df(dx, dy, dz);
+
+}
+
+__global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam){
+
+	PointIJK vox_ijk;
+	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
+	vox_ijk.j = threadIdx.y + (blockIdx.y * blockDim.y);
+	vox_ijk.i = threadIdx.z + (blockIdx.z * blockDim.z);
+
+	if(!dose->pointIJKWithinImage(&vox_ijk)) {
+		return;
+	}
+
+	int vox_index = dose->pointIJKtoIndex(&vox_ijk);
+
+	PointXYZ vox_xyz;
+	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
+
+	PointXYZ uvec;
+	beam->unitVectorToSource(&vox_xyz, &uvec);
+
+	PointXYZ vox_ray_xyz;
+	PointIJK vox_ray_ijk;
+
+	int vox_ray_index = 0;
+    float ray_length = 0.0;
+    float wet_sum = -0.05;
+    float density = 0.0;
+	const float step_length = 1.0;
+
+    while(true){
+
+		vox_ray_xyz.x = fmaf(uvec.x, ray_length, vox_xyz.x);
+		vox_ray_xyz.y = fmaf(uvec.y, ray_length, vox_xyz.y);
+		vox_ray_xyz.z = fmaf(uvec.z, ray_length, vox_xyz.z);
+
+		dose->pointXYZtoIJK(&vox_ray_xyz, &vox_ray_ijk, beam);
+
+		if(!dose->pointIJKWithinImage(&vox_ray_ijk)){
+			break;
+		}
+
+		vox_ray_index = dose->pointIJKtoIndex(&vox_ray_ijk);
+
+		density = dose->DensityArray[vox_ray_index];
+
+		wet_sum = fmaf(fmaxf(density, 0.0), step_length / 10.0, wet_sum);
+
+		ray_length += step_length;
+
+	}
+
+	dose->WETArray[vox_index] = wet_sum;
+
+    __syncthreads();
 
 }

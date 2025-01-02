@@ -35,9 +35,8 @@ class IMRTDose : public CudaDose{
 
 };
 
-__global__ void rayTraceKernel(IMRTDose * dose, IMRTBeam * beam);
 
-__global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam);
+// __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam);
 
 // __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam);
 

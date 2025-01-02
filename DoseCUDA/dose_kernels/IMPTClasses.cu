@@ -84,62 +84,6 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 __host__ IMPTDose::IMPTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
 
 
-__global__ void rayTraceKernel(IMPTDose * dose, IMPTBeam * beam){
-
-	PointIJK vox_ijk;
-	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
-	vox_ijk.j = threadIdx.y + (blockIdx.y * blockDim.y);
-	vox_ijk.i = threadIdx.z + (blockIdx.z * blockDim.z);
-
-	if(!dose->pointIJKWithinImage(&vox_ijk)) {
-		return;
-	}
-
-	int vox_index = dose->pointIJKtoIndex(&vox_ijk);
-
-	PointXYZ vox_xyz;
-	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
-
-	PointXYZ uvec;
-	beam->unitVectorToSource(&vox_xyz, &uvec);
-
-	PointXYZ vox_ray_xyz;
-	PointIJK vox_ray_ijk;
-
-	int vox_ray_index = 0;
-    float ray_length = 0.0;
-    float wet_sum = -0.05;
-    float density = 0.0;
-	const float step_length = 1.0;
-
-    for(int i=0; i<360; i++){
-
-		vox_ray_xyz.x = fmaf(uvec.x, ray_length, vox_xyz.x);
-		vox_ray_xyz.y = fmaf(uvec.y, ray_length, vox_xyz.y);
-		vox_ray_xyz.z = fmaf(uvec.z, ray_length, vox_xyz.z);
-
-		dose->pointXYZtoIJK(&vox_ray_xyz, &vox_ray_ijk, beam);
-
-		if(!dose->pointIJKWithinImage(&vox_ray_ijk)){
-			break;
-		}
-
-		vox_ray_index = dose->pointIJKtoIndex(&vox_ray_ijk);
-
-		density = dose->DensityArray[vox_ray_index];
-
-		wet_sum = fmaf(fmaxf(density, 0.0), step_length / 10.0, wet_sum);
-
-		ray_length += step_length;
-
-	}
-
-	dose->WETArray[vox_index] = wet_sum;
-
-    __syncthreads();
-
-}
-
 __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * SmoothedWETArray){
 
 	PointIJK vox_ijk;

@@ -38,62 +38,6 @@ __device__ float IMRTBeam::headTransmission(const PointXYZ * point_xyz){
 __host__ IMRTDose::IMRTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
 
 
-__global__ void rayTraceKernelPhoton(IMRTDose * dose, IMRTBeam * beam){
-
-	PointIJK vox_ijk;
-	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
-	vox_ijk.j = threadIdx.y + (blockIdx.y * blockDim.y);
-	vox_ijk.i = threadIdx.z + (blockIdx.z * blockDim.z);
-
-	if(!dose->pointIJKWithinImage(&vox_ijk)) {
-		return;
-	}
-
-	size_t vox_index = dose->pointIJKtoIndex(&vox_ijk);
-
-	PointXYZ vox_xyz;
-	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
-
-	PointXYZ uvec;
-	beam->unitVectorToSource(&vox_xyz, &uvec);
-
-	PointXYZ vox_ray_xyz;
-	PointIJK vox_ray_ijk;
-
-	int vox_ray_index = 0;
-    float ray_length = 0.0;
-    float wet_sum = -0.05;
-    float density = 0.0;
-	const float step_length = 1.0;
-
-    for(int i=0; i<360; i++){
-
-		vox_ray_xyz.x = fmaf(uvec.x, ray_length, vox_xyz.x);
-		vox_ray_xyz.y = fmaf(uvec.y, ray_length, vox_xyz.y);
-		vox_ray_xyz.z = fmaf(uvec.z, ray_length, vox_xyz.z);
-
-		dose->pointXYZtoIJK(&vox_ray_xyz, &vox_ray_ijk, beam);
-
-		if(!dose->pointIJKWithinImage(&vox_ray_ijk)){
-			break;
-		}
-
-		vox_ray_index = dose->pointIJKtoIndex(&vox_ray_ijk);
-
-		density = dose->DensityArray[vox_ray_index];
-
-		wet_sum = fmaf(fmaxf(density, 0.0), step_length / 10.0, wet_sum);
-
-		ray_length += step_length;
-
-	}
-
-	dose->WETArray[vox_index] = wet_sum;
-
-    __syncthreads();
-
-}
-
 __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 
 	PointIJK vox_ijk;
@@ -147,15 +91,16 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 	int vox_ray_index;
 
 	for(int i = 0; i < 6; i+=2){
-		for(int j = 0; j < 12; j+=2){
 
-			//Kernel constants
-			th = g_kernel[0][i];
-			Am = g_kernel[1][i];
-			am = g_kernel[2][i];
-			Bm = g_kernel[3][i];
-			bm = g_kernel[4][i];
-			ray_length = g_kernel[5][i];
+		//Kernel constants
+		th = g_kernel[0][i];
+		Am = g_kernel[1][i];
+		am = g_kernel[2][i];
+		Bm = g_kernel[3][i];
+		bm = g_kernel[4][i];
+		ray_length = g_kernel[5][i];
+
+		for(int j = 0; j < 12; j+=2){
 
 			//kernel vector
 			xc = sinf(th * M_PI / 180.0) * cosf((float)j * 30.0 * M_PI / 180.0);
@@ -209,7 +154,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 		}
 	}
 
-	if(!isnan(dose_value) & (dose_value > 0.0)){
+	if(!isnan(dose_value) && (dose_value > 0.0)){
 		dose->DoseArray[vox_index] = MU_CAL * dose_value;
 	}
 
@@ -246,7 +191,7 @@ void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);
 
-    rayTraceKernelPhoton<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr);
+    rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr);
     termaKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMAArray);
 	cccKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMAArray);
 

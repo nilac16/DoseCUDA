@@ -29,9 +29,7 @@ class IMPTDose : public CudaDose{
 };
 
 
-__global__ void rayTraceKernel(IMPTDose * dose, IMPTBeam * beam);
-
-__global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam);
+//__global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam);
 
 
 void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam);
