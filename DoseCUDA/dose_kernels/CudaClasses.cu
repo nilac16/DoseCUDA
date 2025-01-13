@@ -175,7 +175,7 @@ __device__ float CudaDose::pointXYZDistanceToSource(const PointXYZ * point_img_x
 
 }
 
-__global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam){
+__global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D DensityTexture){
 
 	PointIJK vox_ijk;
 	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -194,7 +194,7 @@ __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam){
 	PointXYZ uvec;
 	beam->unitVectorToSource(&vox_xyz, &uvec);
 
-	PointXYZ vox_ray_xyz;
+	PointXYZ vox_ray_xyz, tex_xyz;
 	PointIJK vox_ray_ijk;
 
 	int vox_ray_index = 0;
@@ -209,15 +209,11 @@ __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam){
 		vox_ray_xyz.y = fmaf(uvec.y, ray_length, vox_xyz.y);
 		vox_ray_xyz.z = fmaf(uvec.z, ray_length, vox_xyz.z);
 
-		dose->pointXYZtoIJK(&vox_ray_xyz, &vox_ray_ijk, beam);
-
-		if(!dose->pointIJKWithinImage(&vox_ray_ijk)){
+		dose->pointXYZtoTextureXYZ(&vox_ray_xyz, &tex_xyz, beam);
+		if (!dose->textureXYZWithinImage(&tex_xyz)) {
 			break;
 		}
-
-		vox_ray_index = dose->pointIJKtoIndex(&vox_ray_ijk);
-
-		density = dose->DensityArray[vox_ray_index];
+		density = DensityTexture.sample(tex_xyz);
 
 		wet_sum = fmaf(fmaxf(density, 0.0), step_length / 10.0, wet_sum);
 

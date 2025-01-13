@@ -54,7 +54,7 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 	PointXYZ vox_xyz, vox_head_xyz;
 	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
 	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
-	
+
 	float distance_to_source = beam->distanceToSource(&vox_xyz);
 	float transmission = beam->headTransmission(&vox_head_xyz);
 	float wet = dose->WETArray[vox_index];
@@ -65,7 +65,7 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 
 }
 
-__global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
+__global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATexture, Texture3D DensityTexture){
 
 	PointIJK vox_ijk;
 	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -78,7 +78,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 
 	size_t vox_index = dose->pointIJKtoIndex(&vox_ijk);
 
-	PointXYZ vox_xyz;
+	PointXYZ vox_xyz, tex_xyz;
 	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
 
 	PointXYZ uvec;
@@ -87,7 +87,6 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 	float dose_value = 0.0;
 	float xc, yc, zc, xr, yr, zr, Rs, Rp, ray_length, sp, th, Am, am, Bm, bm, Ti, Di;
 	PointXYZ vox_ray_xyz;
-	PointIJK vox_ray_ijk;
 	int vox_ray_index;
 
 	for(int i = 0; i < 6; i+=2){
@@ -128,16 +127,12 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray){
 				vox_ray_xyz.y = fmaf(yr, ray_length * 10.0, vox_xyz.y);
 				vox_ray_xyz.z = fmaf(zr, ray_length * 10.0, vox_xyz.z);
 
-				dose->pointXYZtoIJK(&vox_ray_xyz, &vox_ray_ijk, beam);
-
-				if(!dose->pointIJKWithinImage(&vox_ray_ijk)){
+				dose->pointXYZtoTextureXYZ(&vox_ray_xyz, &tex_xyz, beam);
+				if (!dose->textureXYZWithinImage(&tex_xyz)) {
 					break;
 				}
-
-				vox_ray_index = dose->pointIJKtoIndex(&vox_ray_ijk);
-
-				Ti = TERMAArray[vox_ray_index];
-				Di = dose->DensityArray[vox_ray_index] * sp;
+				Ti = TERMATexture.sample(tex_xyz);
+				Di = DensityTexture.sample(tex_xyz);
 
 				if(Di <= 0.0){
 					Di = AIR_DENSITY * sp;
@@ -191,9 +186,14 @@ void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);
 
-    rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr);
+	auto DensityTexture = Texture3D::fromHostData(h_dose->DensityArray, h_dose->img_sz, cudaFilterModeLinear);
+
+    rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, DensityTexture);
     termaKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMAArray);
-	cccKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMAArray);
+
+	auto TERMATexture = Texture3D::fromDeviceData(TERMAArray, h_dose->img_sz, cudaFilterModeLinear);
+
+	cccKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMATexture, DensityTexture);
 
 	CUDA_CHECK(cudaMemcpy(h_dose->DoseArray, d_dose.DoseArray, d_dose.num_voxels * sizeof(float), cudaMemcpyDeviceToHost));
 

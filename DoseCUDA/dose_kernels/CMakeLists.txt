@@ -8,7 +8,8 @@ target_sources(${MODULE_NAME}
         BaseClasses.cpp
         CudaClasses.cu
         IMPTClasses.cu
-        IMRTClasses.cu)
+        IMRTClasses.cu
+        TextureClasses.cu)
 
 target_include_directories(${MODULE_NAME}
     PRIVATE

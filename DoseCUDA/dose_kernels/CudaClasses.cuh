@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <math_constants.h>
 #include "./BaseClasses.h"
+#include "./TextureClasses.cuh"
 
 
 static inline void cuda_check(cudaError_t err)
@@ -45,8 +46,20 @@ class CudaDose : public DoseClass{
                 && point_ijk->k < this->img_sz.k;
         }
 
+        __device__ bool textureXYZWithinImage(const PointXYZ * point_xyz) {
+            return point_xyz->x >= 0.0f && point_xyz->x < (float)this->img_sz.i
+                && point_xyz->y >= 0.0f && point_xyz->y < (float)this->img_sz.j
+                && point_xyz->z >= 0.0f && point_xyz->z < (float)this->img_sz.k;
+        }
+
         __device__ unsigned int pointIJKtoIndex(const PointIJK * point_ijk) {
             return point_ijk->i + this->img_sz.i * (point_ijk->j + this->img_sz.j * point_ijk->k);
+        }
+
+        __device__ void pointXYZtoTextureXYZ(const PointXYZ * point_xyz, PointXYZ * tex_xyz, BeamClass * beam) {
+            tex_xyz->x = fmaf(1.0f / this->spacing, point_xyz->x + beam->iso.x, 0.5f);
+            tex_xyz->y = fmaf(1.0f / this->spacing, point_xyz->y + beam->iso.y, 0.5f);
+            tex_xyz->z = fmaf(1.0f / this->spacing, point_xyz->z + beam->iso.z, 0.5f);
         }
 
         __device__ void pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * point_xyz, BeamClass * beam);
@@ -69,6 +82,6 @@ class CudaDose : public DoseClass{
 
 };
 
-__global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam);
+__global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D DensityTexture);
 
 #endif

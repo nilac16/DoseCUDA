@@ -269,7 +269,9 @@ void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);
 
-	rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr);
+	auto DensityTexture = Texture3D::fromHostData(h_dose->DensityArray, h_dose->img_sz, cudaFilterModeLinear);
+
+	rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, DensityTexture);
 	smoothRayKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, SmoothedWETArray);
 
 	CUDA_CHECK(cudaMemcpy(h_dose->WETArray, SmoothedWETArray.get(), d_dose.num_voxels * sizeof(float), cudaMemcpyDeviceToHost));
