@@ -33,6 +33,7 @@ class DoseGrid:
         self.origin = np.array(ct_img.GetOrigin())
         self.spacing = np.array(ct_img.GetSpacing())
         self.HU = np.array(sitk.GetArrayFromImage(ct_img), dtype=np.single)
+        self.HU = np.clip(self.HU, -1000.0, None)
         self.size = np.array(self.HU.shape)
 
     def resampleCTfromSpacing(self, spacing):
@@ -82,7 +83,14 @@ class DoseGrid:
         self.origin = ref_origin
         self.spacing = ref_spacing
 
-    def writeDoseDCM(self, dose_path, ref_dose_path, dose_type="EFFECTIVE"):
+    def applyCouchModel(self, couch_wet=8.0):
+        spacing = self.spacing[0]
+        n_voxels = int(50.0 / spacing)
+        hu_override_value = ((couch_wet / (n_voxels * spacing)) - 1.0) * 1000.0
+
+        self.HU[:, -n_voxels:, :] = hu_override_value
+
+    def writeDoseDCM(self, dose_path, ref_dose_path, dose_type="EFFECTIVE", individual_beams=False):
 
         if not dose_path.endswith(".dcm"):
             raise Exception("Dose path must have .dcm extension")
@@ -96,17 +104,31 @@ class DoseGrid:
         else:
             raise Exception("Unknown dose type: %s" % dose_type)
 
-        ref_dose = pyd.dcmread(ref_dose_path)
-        ref_dose.SeriesDescription = ref_dose.SeriesDescription + "_DoseCUDA"
-        ref_dose.DoseSummationType = "PLAN"
-        ref_dose.DoseType = dose_type
-        ref_dose.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = pyd.uid.generate_uid()
-        
-        dose_dcm = np.array(self.dose * 1000.0 * RBE, dtype=np.uint16)
-        ref_dose.PixelData = dose_dcm
-        ref_dose.DoseGridScaling = 0.001
+        if individual_beams:
+            for i, beam_dose in enumerate(self.beam_doses):
+                ref_dose = pyd.dcmread(ref_dose_path)
+                ref_dose.SeriesDescription = ref_dose.SeriesDescription + "_DoseCUDA"
+                ref_dose.DoseSummationType = "BEAM"
+                ref_dose.DoseType = dose_type
+                ref_dose.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = pyd.uid.generate_uid()
 
-        ref_dose.save_as(dose_path)
+                dose_dcm = np.array(beam_dose * 500.0 * RBE, dtype=np.uint16)
+                ref_dose.PixelData = dose_dcm
+                ref_dose.DoseGridScaling = 0.002
+
+                ref_dose.save_as(dose_path.replace(".dcm", "_beam%02i.dcm" % (i+1)))
+        else:
+            ref_dose = pyd.dcmread(ref_dose_path)
+            ref_dose.SeriesDescription = ref_dose.SeriesDescription + "_DoseCUDA"
+            ref_dose.DoseSummationType = "PLAN"
+            ref_dose.DoseType = dose_type
+            ref_dose.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = pyd.uid.generate_uid()
+            
+            dose_dcm = np.array(self.dose * 500.0 * RBE, dtype=np.uint16)
+            ref_dose.PixelData = dose_dcm
+            ref_dose.DoseGridScaling = 0.002
+
+            ref_dose.save_as(dose_path)
 
     def writeDoseNRRD(self, dose_path, individual_beams=False, dose_type="EFFECTIVE"):
 

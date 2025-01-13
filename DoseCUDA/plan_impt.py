@@ -61,7 +61,7 @@ class IMPTDoseGrid(DoseGrid):
                                                     np.array(plan.divergence_params, dtype=np.single),
                                                     gpu_id)
 
-            self.beam_doses.append(beam_dose)
+            self.beam_doses.append(beam_dose * plan.n_fractions)
             self.dose += beam_dose
 
         self.dose *= plan.n_fractions

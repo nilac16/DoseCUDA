@@ -67,6 +67,11 @@ class IMRTDoseGrid(DoseGrid):
                     self.spacing[0],
                     gpu_id)
                 beam_dose += cp_dose * cp.mu
+                max_dose = np.max(beam_dose)
+                print(cp.mu)
+                print(plan.n_fractions)
+                print(np.array(beam.iso - self.origin, dtype=np.single))
+
 
             self.beam_doses.append(beam_dose)
             self.dose += beam_dose
@@ -161,9 +166,24 @@ class IMRTPlan(Plan):
 
                         mu = cp.CumulativeMetersetWeight - cumulative_mu
 
-                        mlc = np.reshape(mlc, (2, self.n_mlc_pairs))
-                        mlc = np.array(np.vstack((mlc, self.mlc_offsets.reshape(1, -1), self.mlc_widths.reshape(1, -1))), dtype=np.single)
-                        mlc = np.transpose(mlc)
+                        if mlc is not None:
+                            mlc = np.reshape(mlc, (2, self.n_mlc_pairs))
+                            mlc = np.array(np.vstack((mlc, self.mlc_offsets.reshape(1, -1), self.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.transpose(mlc)
+
+                        else:
+
+                            mlc = np.zeros((2, self.n_mlc_pairs), dtype=np.single)
+
+                            if xjaws is not None:
+                                mlc[0, :] = xjaws[0]
+                                mlc[1, :] = xjaws[1]
+
+                            if yjaws is not None:
+                                for i in range(self.n_mlc_pairs):
+                                    if(self.mlc_offsets[i] < yjaws[0]) or (self.mlc_offsets[i] > yjaws[1]):
+                                        mlc[0, i] = 0.0
+                                        mlc[1, i] = 0.0
 
                         control_point = IMRTControlPoint(mu * total_mu, mlc, ga, ca, ta, xjaws, yjaws)
                         
