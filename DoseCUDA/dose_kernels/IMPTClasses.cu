@@ -127,8 +127,8 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 		while ((dr < (center_wet * 10.0)) & (dr < 10.0)){
 
 			vox_head_xyz_conv.x = vox_head_xyz.x + (dr * cosx);
-			vox_head_xyz_conv.y = vox_head_xyz.y;
-			vox_head_xyz_conv.z = vox_head_xyz.z + (dr * sinx);
+			vox_head_xyz_conv.y = vox_head_xyz.y + (dr * sinx);
+			vox_head_xyz_conv.z = vox_head_xyz.z;
 
 			dose->pointXYZHeadToImage(&vox_head_xyz_conv, &vox_image_xyz_conv, beam);
 			dose->pointXYZtoIJK(&vox_image_xyz_conv, &vox_ijk_conv, beam);
@@ -200,9 +200,9 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	float total_dose = 0.0, distance_to_cax, primary_dose, halo_dose;
 
 	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
-	float vx = -vox_head_xyz.x;
-	float vy = vox_head_xyz.z;
-	float vz = -vox_head_xyz.y;
+	float vx = vox_head_xyz.x;
+	float vy = vox_head_xyz.y;
+	float vz = -vox_head_xyz.z; // make z increase with distance from the source
 	float sx, sy, sz = (VSADX + VSADY) / 2.0;
 
 	const int spot_end = layer.spot_start + layer.n_spots;

@@ -30,20 +30,6 @@ __device__ float CudaBeam::distanceToSource(const PointXYZ * point_xyz){
 
 __host__ CudaDose::CudaDose(DoseClass * h_dose) : DoseClass(h_dose) {}
 
-// Inlined in CudaClasses.cuh
-/* __device__ bool CudaDose::pointIJKWithinImage(const PointIJK * point_ijk) {
-
-	return point_ijk->i < this->img_sz.i
-	    && point_ijk->j < this->img_sz.j
-		&& point_ijk->k < this->img_sz.k;
-} */
-
-// Inlined in CudaClasses.cuh
-/* __device__ unsigned int CudaDose::pointIJKtoIndex(const PointIJK * point_ijk) {
-
-	return point_ijk->i + this->img_sz.i * (point_ijk->j + this->img_sz.j * point_ijk->k);
-} */
-
 __device__ void CudaDose::pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * point_xyz, BeamClass * beam) {
 
 	point_xyz->x = (float)point_ijk->i * this->spacing - beam->iso.x;
@@ -51,14 +37,6 @@ __device__ void CudaDose::pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * p
 	point_xyz->z = (float)point_ijk->k * this->spacing - beam->iso.z;
 
 }
-
-// Inlined in CudaClasses.cuh
-/* __device__ void CudaDose::pointXYZtoIJK(const PointXYZ * point_xyz, PointIJK * point_ijk, BeamClass * beam) {
-
-	point_ijk->i = (int)roundf((point_xyz->x + beam->iso.x) / this->spacing);
-	point_ijk->j = (int)roundf((point_xyz->y + beam->iso.y) / this->spacing);
-	point_ijk->k = (int)roundf((point_xyz->z + beam->iso.z) / this->spacing);
-} */
 
 /** sincos but with a value theoretically supplied to arctangent */
 __device__ void sincos_from_atan(float y, float x, float *sptr, float *cptr) {
@@ -97,9 +75,15 @@ __device__ void CudaDose::pointXYZImageToHead(const PointXYZ * point_img, PointX
 	yc = yg;
 	zc = -xg * sinx + zg * cosx;
 
-	point_head->x = xc;
-	point_head->y = yc;
-	point_head->z = zc;
+
+	//swap final coordinates to match DICOM nozzle coordinate system
+	//for an AP beam:
+	//	beam travels in negative z direction
+	//	positive x is to the patient's left
+	//	positive y is to the patient's superior
+	point_head->x = -xc;
+	point_head->y = zc;
+	point_head->z = yc;
 
 }
 
@@ -107,9 +91,10 @@ __device__ void CudaDose::pointXYZHeadToImage(const PointXYZ * point_head, Point
 
 	float sinx, cosx;
 
-	float xz = point_head->x;
-	float yz = point_head->y;
-	float zz = point_head->z;
+	//convert back to DICOM patient LPS coordinates
+	float xz = -point_head->x;
+	float yz = point_head->z;
+	float zz = point_head->y;
 
 	//collimator rotation = rotate about y-axis (again, negative direction)
 	float xc, yc, zc;

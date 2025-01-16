@@ -10,16 +10,16 @@ __host__ IMRTBeam::IMRTBeam(BeamClass * h_beam) : CudaBeam(h_beam) {}
 __device__ float IMRTBeam::headTransmission(const PointXYZ * point_xyz){
 	
 	PointXYZ point_xyz_div;
-	point_xyz_div.x = -point_xyz->x / ((-point_xyz->y + PRIMARY_SOURCE_DISTANCE) / PRIMARY_SOURCE_DISTANCE);
-	point_xyz_div.z = point_xyz->z / ((-point_xyz->y + PRIMARY_SOURCE_DISTANCE) / PRIMARY_SOURCE_DISTANCE);
-	point_xyz_div.y = point_xyz->y;
+	point_xyz_div.x = point_xyz->x / ((-point_xyz->z + PRIMARY_SOURCE_DISTANCE) / PRIMARY_SOURCE_DISTANCE);
+	point_xyz_div.y = point_xyz->y / ((-point_xyz->z + PRIMARY_SOURCE_DISTANCE) / PRIMARY_SOURCE_DISTANCE);
+	point_xyz_div.z = point_xyz->z;
 	
 	float transmission = 0.0;
 	float tip_distance = 0.0;
 	float x1_eff, x2_eff;
 
 	for(int i=0; i < this->n_mlc_pairs; i++){
-		if((point_xyz_div.z > (this->mlc[i].y_offset - (this->mlc[i].y_width / 2.0))) && (point_xyz_div.z <= (this->mlc[i].y_offset + (this->mlc[i].y_width / 2.0)))){
+		if((point_xyz_div.y > (this->mlc[i].y_offset - (this->mlc[i].y_width / 2.0))) && (point_xyz_div.y <= (this->mlc[i].y_offset + (this->mlc[i].y_width / 2.0)))){
 			x1_eff = this->mlc[i].x1 - 2.0;
 			x2_eff = this->mlc[i].x2 + 2.0;
 			if(point_xyz_div.x > x1_eff && point_xyz_div.x < x2_eff){
@@ -81,45 +81,60 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	PointXYZ vox_xyz, tex_xyz;
 	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
 
+	PointXYZ beam_xyz;
+	dose->pointXYZImageToHead(&vox_xyz, &beam_xyz, beam);
+
 	PointXYZ uvec;
 	beam->unitVectorToSource(&vox_xyz, &uvec);
+	float th_0 = acosf(uvec.y);
+	float phi_0 = atan2f(uvec.z, uvec.x);
 
 	float dose_value = 0.0;
 	float xc, yc, zc, xr, yr, zr, Rs, Rp, ray_length, sp, th, Am, am, Bm, bm, Ti, Di;
 	PointXYZ vox_ray_xyz;
 	int vox_ray_index;
 
-	for(int i = 0; i < 6; i+=2){
+	float th_1, phi_1;
+
+	for(int i = 0; i < 6; i++){
 
 		//Kernel constants
-		th = g_kernel[0][i];
+		th = g_kernel[0][i] * M_PI / 180.0;
 		Am = g_kernel[1][i];
 		am = g_kernel[2][i];
 		Bm = g_kernel[3][i];
 		bm = g_kernel[4][i];
 		ray_length = g_kernel[5][i];
 
-		for(int j = 0; j < 12; j+=2){
+		th_1 = th_0 + th;
 
-			//kernel vector
-			xc = sinf(th * M_PI / 180.0) * cosf((float)j * 30.0 * M_PI / 180.0);
-			yc = sinf(th * M_PI / 180.0) * sinf((float)j * 30.0 * M_PI / 180.0);
-			zc = cosf(th * M_PI / 180.0);
+		for(int j = 0; j < 12; j++){
 
-			//kernel tilting
-			if(uvec.y > 0){
-				xr =  (xc * (1 - (powf(uvec.x, 2.0) / (1 + uvec.y)))) 	- (yc * ((uvec.x * uvec.z) / (1 + uvec.y))) 			+ (zc * uvec.x);
-				zr = -(xc * ((uvec.x * uvec.z) / (1 + uvec.y))) 		+ (yc * (1 - (powf(uvec.z, 2.0) / (1 + uvec.y))))  		+ (zc * uvec.z);
-				yr = -(xc * uvec.x) 									- (yc * uvec.z) 										+ (zc * uvec.y);
-			} else {
-				xr = -(xc * (1 - (powf(uvec.x, 2.0) / (1 - uvec.y)))) 	+ (yc * ((uvec.x * uvec.z) / (1 - uvec.y))) 			+ (zc * uvec.x);
-				zr =  (xc * ((uvec.x * uvec.z) / (1 - uvec.y))) 		- (yc * (1 - (powf(uvec.z, 2.0) / (1 - uvec.y))))  		+ (zc * uvec.z);
-				yr = -(xc * uvec.x) 									- (yc * uvec.z) 										+ (zc * uvec.y);
-			}
+			// //kernel vector
+			// xc = sinf(th * M_PI / 180.0) * cosf((float)j * 30.0 * M_PI / 180.0);
+			// yc = sinf(th * M_PI / 180.0) * sinf((float)j * 30.0 * M_PI / 180.0);
+			// zc = cosf(th * M_PI / 180.0);
+
+			// //kernel tilting
+			// if(uvec.y > 0){
+			// 	xr =  (xc * (1 - (powf(uvec.x, 2.0) / (1 + uvec.y)))) 	- (yc * ((uvec.x * uvec.z) / (1 + uvec.y))) 			+ (zc * uvec.x);
+			// 	zr = -(xc * ((uvec.x * uvec.z) / (1 + uvec.y))) 		+ (yc * (1 - (powf(uvec.z, 2.0) / (1 + uvec.y))))  		+ (zc * uvec.z);
+			// 	yr = -(xc * uvec.x) 									- (yc * uvec.z) 										+ (zc * uvec.y);
+			// } else {
+			// 	xr = -(xc * (1 - (powf(uvec.x, 2.0) / (1 - uvec.y)))) 	+ (yc * ((uvec.x * uvec.z) / (1 - uvec.y))) 			+ (zc * uvec.x);
+			// 	zr =  (xc * ((uvec.x * uvec.z) / (1 - uvec.y))) 		- (yc * (1 - (powf(uvec.z, 2.0) / (1 - uvec.y))))  		+ (zc * uvec.z);
+			// 	yr = -(xc * uvec.x) 									- (yc * uvec.z) 										+ (zc * uvec.y);
+			// }
+
+			phi_1 = phi_0 + (float)j * 30.0 * M_PI / 180.0;
+
+			xr = sinf(th_1) * cosf(phi_1);
+			zr = sinf(th_1) * sinf(phi_1);
+			yr = cosf(th_1);
 
 			Rs = 0.0;
 			Rp = 0.0;
-			sp = dose->spacing / 10.0 * 2.0; 
+			sp = dose->spacing / 10.0;
 
 			while(ray_length >= -sp) {
 
@@ -128,14 +143,16 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 				vox_ray_xyz.z = fmaf(zr, ray_length * 10.0, vox_xyz.z);
 
 				dose->pointXYZtoTextureXYZ(&vox_ray_xyz, &tex_xyz, beam);
-				if (!dose->textureXYZWithinImage(&tex_xyz)) {
-					break;
+				if (dose->textureXYZWithinImage(&tex_xyz)) {
+					Ti = TERMATexture.sample(tex_xyz);
+					Di = DensityTexture.sample(tex_xyz) / 10.0;
+				} else {
+					Ti = 0.0;
+					Di = AIR_DENSITY * sp / 10.0;
 				}
-				Ti = TERMATexture.sample(tex_xyz);
-				Di = DensityTexture.sample(tex_xyz);
 
 				if(Di <= 0.0){
-					Di = AIR_DENSITY * sp;
+					Di = AIR_DENSITY * sp / 10.0;
 				}
 
 				Rp = Rp * exp(-am * Di) + (Ti * sinf(th * M_PI / 180.0) * (Am / powf(am, 2)) * (1 - exp(-am * Di)));
@@ -149,8 +166,9 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 		}
 	}
 
-	if(!isnan(dose_value) && (dose_value > 0.0)){
-		dose->DoseArray[vox_index] = MU_CAL * dose_value;
+	if(!isnan(dose_value) && (dose_value >= 0.0)){
+		// dose->DoseArray[vox_index] = MU_CAL * dose_value;
+		dose->DoseArray[vox_index] = beam_xyz.y;
 	}
 
 	__syncthreads();

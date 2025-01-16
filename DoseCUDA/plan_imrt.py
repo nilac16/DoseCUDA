@@ -66,13 +66,8 @@ class IMRTDoseGrid(DoseGrid):
                     0.0, 
                     self.spacing[0],
                     gpu_id)
-                beam_dose += cp_dose * cp.mu
-                max_dose = np.max(beam_dose)
-                print(cp.mu)
-                print(plan.n_fractions)
-                print(np.array(beam.iso - self.origin, dtype=np.single))
-
-
+                beam_dose += cp_dose
+                
             self.beam_doses.append(beam_dose)
             self.dose += beam_dose
 
@@ -85,6 +80,7 @@ class IMRTBeam(Beam):
         super().__init__()
         self.cp_list = []
         self.n_cps = 0
+
 
     def addControlPoint(self, cp):
         self.cp_list.append(cp)
@@ -106,27 +102,6 @@ class IMRTPlan(Plan):
         self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
         self.mlc_distance_to_source = mlc_geometry["distance_to_source"].to_numpy()
         self.n_mlc_pairs = len(self.mlc_index)
-
-
-    def transmissionArrays(self, cp):
-
-        xjaws_mask, yjaws_mask, mlc_mask = None, None, None
-        if cp.xjaws is not None:
-            points = [(cp.xjaws[0], -250), (cp.xjaws[0], 250), (cp.xjaws[1], 250), (cp.xjaws[1], -250)]
-            xjaws_mask, x_coords, y_coords = polygon_to_mask(points)
-
-        if cp.yjaws is not None:
-            points = [(-250, cp.yjaws[0]), (250, cp.yjaws[0]), (250, cp.yjaws[1]), (-250, cp.yjaws[1])]
-            yjaws_mask, x_coords, y_coords = polygon_to_mask(points)
-
-        if cp.mlc is not None:
-            points = []
-            for i in range(0, len(cp.mlc)):
-                points.append((cp.mlc[i], self.beam_model.mlc_offsets[i] - self.beam_model.mlc_widths[i] / 2))
-                points.append((cp.mlc[i], self.beam_model.mlc_offsets[i] + self.beam_model.mlc_widths[i] / 2))
-            mlc_mask, x_coords, y_coords = polygon_to_mask(points)
-
-        return xjaws_mask, yjaws_mask, mlc_mask
 
 
     def readPlanDicom(self, plan_path):
@@ -184,6 +159,9 @@ class IMRTPlan(Plan):
                                     if(self.mlc_offsets[i] < yjaws[0]) or (self.mlc_offsets[i] > yjaws[1]):
                                         mlc[0, i] = 0.0
                                         mlc[1, i] = 0.0
+                            
+                            mlc = np.array(np.vstack((mlc, self.mlc_offsets.reshape(1, -1), self.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.transpose(mlc)
 
                         control_point = IMRTControlPoint(mu * total_mu, mlc, ga, ca, ta, xjaws, yjaws)
                         
