@@ -207,12 +207,6 @@ __device__ float cax_distance(const Spot &spot, const PointXYZ &vox)
 	return line_nearest(emerge, spotloc, vox);
 }
 
-__device__ float gauss(float x, float s)
-{
-	x /= s;
-	return expf(-0.5 * x * x);
-}
-
 __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	PointIJK vox_ijk;
@@ -261,26 +255,16 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	const int spot_end = layer.spot_start + layer.n_spots;
 
+	const float primary_scal = sigma_total ? -0.5f / sqr(sigma_total) : -INFINITY;
+	const float halo_scal = sigma_halo_total ? -0.5f / sqr(sigma_halo_total) : -INFINITY;
+
 	for (int spot_id=layer.spot_start; spot_id < spot_end; spot_id++){
 
 		const Spot &spot = beam->spots[spot_id];
-
 		auto distance_to_cax_sqr = cax_distance(spot, vox_head_xyz);
-		if (distance_to_cax_sqr >= 2500.0) {
-			continue;
-		}
 
-		auto distance_to_cax = sqrtf(distance_to_cax_sqr);
-
-		primary_dose = primary_dose_factor * gauss(distance_to_cax, sigma_total);
-		if (isnan(primary_dose)) {
-			continue;
-		}
-
-		halo_dose = halo_dose_factor * gauss(distance_to_cax, sigma_halo_total);
-		if (isnan(halo_dose)) {
-			continue;
-		}
+		primary_dose = primary_dose_factor * expf(primary_scal * distance_to_cax_sqr);
+		halo_dose = halo_dose_factor * expf(halo_scal * distance_to_cax_sqr);
 
 		total_dose = fmaf(spot.mu, primary_dose + halo_dose, total_dose);
 
