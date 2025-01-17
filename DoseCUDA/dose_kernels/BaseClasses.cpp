@@ -44,8 +44,8 @@ BeamClass::BeamClass(float * iso, float gantry_angle, float couch_angle){
 
 	//gantry rotation - rotate about z-axis
 	float xg, yg;
-	xg = -((VSADX + VSADY) / 2.0) * this->singa; 
-	yg = ((VSADX + VSADY) / 2.0) * this->cosga;
+	xg = -fmaxf(VSADX, VSADY) * this->singa;
+	yg = fmaxf(VSADX, VSADY) * this->cosga;
 	//zg = 0.0;
 
 	//table rotation - rotate about y-axis

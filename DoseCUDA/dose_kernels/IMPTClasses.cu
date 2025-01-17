@@ -149,6 +149,64 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 
 }
 
+/** @brief Dot product between two `PointXYZ`
+ * 	@todo Take some time to create methods on `PointXYZ` later to simplify much
+ * 		of this type of code wherever possible
+ */
+__device__ float xyz_dotproduct(const PointXYZ &a, const PointXYZ &b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+/** @brief Compute the squared minimum distance between a line and an arbitrary
+ * 		point
+ * 	@param l0
+ * 		"Starting" point on the line
+ * 	@param l1
+ * 		"Ending" point of the line segment
+ * 	@param p
+ * 		Test point, from which the nearest distance to the infinite line defined
+ * 		by @p l0 and @p l1 will be computed
+ * 	@returns The nearest distance squared, or `NaN` if @p l0 and @p l1 are the
+ * 		same coordinates
+ */
+__device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const PointXYZ &p)
+{
+	PointXYZ alpha = {
+		l0.x - p.x,
+		l0.y - p.y,
+		l0.z - p.z
+	}, beta = {
+		l1.x - l0.x,
+		l1.y - l0.y,
+		l1.z - l0.z
+	};
+	auto alphasqr = xyz_dotproduct(alpha, alpha);
+	auto betasqr = xyz_dotproduct(beta, beta);
+	auto dp = xyz_dotproduct(alpha, beta);
+
+	return alphasqr - dp * dp / betasqr;
+}
+
+/** @brief Compute the @b squared distance of voxel coordinates to their nearest
+ * 		point on a pencil beam
+ * 	@param spot
+ * 		The pencil beam
+ * 	@param vox
+ * 		The voxel coordinates in BEV
+ */
+__device__ float cax_distance(const Spot &spot, const PointXYZ &vox)
+{
+	PointXYZ emerge = {
+		max(VSADX - VSADY, 0.0f) * spot.x / VSADX,
+		max(VSADY - VSADX, 0.0f) * spot.y / VSADY,
+		min(VSADX, VSADY)
+	};
+	PointXYZ spotloc = { spot.x, spot.y, 0 };
+
+	return line_nearest(emerge, spotloc, vox);
+}
+
 __device__ float gauss(float x, float s)
 {
 	x /= s;
@@ -197,13 +255,9 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	float primary_dose_factor = (1.0 - halo_weight) * idd / (2.0 * CUDART_PI_F * sqr(sigma_total));
 	float halo_dose_factor = halo_weight * idd / (2.0 * CUDART_PI_F * sqr(sigma_halo_total));
 
-	float total_dose = 0.0, distance_to_cax, primary_dose, halo_dose;
+	float total_dose = 0.0, primary_dose, halo_dose;
 
 	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
-	float vx = vox_head_xyz.x;
-	float vy = vox_head_xyz.y;
-	float vz = -vox_head_xyz.z; // make z increase with distance from the source
-	float sx, sy, sz = (VSADX + VSADY) / 2.0;
 
 	const int spot_end = layer.spot_start + layer.n_spots;
 
@@ -211,22 +265,12 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 		const Spot &spot = beam->spots[spot_id];
 
-		sx = spot.x;
-		sy = spot.y;
-
-		if ((fabsf(vx - sx) > 50.0) || (fabsf(vy - sy) > 50.0)){
+		auto distance_to_cax_sqr = cax_distance(spot, vox_head_xyz);
+		if (distance_to_cax_sqr >= 2500.0) {
 			continue;
 		}
 
-		{
-			float dx, dy, dz;
-
-			dx = sy * vz - sz * (vy - sy);
-			dy = sz * (vx - sx) - sx * vz;
-			dz = sx * (vy - sy) - sy * (vx - sx);
-
-			distance_to_cax = norm3df(dx, dy, dz) * rnorm3df(sx, sy, sz);
-		}
+		auto distance_to_cax = sqrtf(distance_to_cax_sqr);
 
 		primary_dose = primary_dose_factor * gauss(distance_to_cax, sigma_total);
 		if (isnan(primary_dose)) {
