@@ -80,6 +80,57 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 
 }
 
+/** @brief Dot product between two `PointXYZ`
+ * 	@todo Take some time to create methods on `PointXYZ` later to simplify much
+ * 		of this type of code wherever possible
+ */
+__device__ float xyz_dotproduct(const PointXYZ &a, const PointXYZ &b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+/** @brief Compute the squared minimum distance between a line and an arbitrary
+ * 		point
+ * 	@param l0
+ * 		"Starting" point on the line
+ * 	@param l1
+ * 		"Ending" point of the line segment
+ * 	@param p
+ * 		Test point, from which the nearest distance to the infinite line defined
+ * 		by @p l0 and @p l1 will be computed
+ * 	@returns The nearest distance squared, or `NaN` if @p l0 and @p l1 are the
+ * 		same coordinates
+ */
+__device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const PointXYZ &p)
+{
+	PointXYZ alpha = {
+		l0.x - p.x,
+		l0.y - p.y,
+		l0.z - p.z
+	}, beta = {
+		l1.x - l0.x,
+		l1.y - l0.y,
+		l1.z - l0.z
+	};
+	auto alphasqr = xyz_dotproduct(alpha, alpha);
+	auto betasqr = xyz_dotproduct(beta, beta);
+	auto dp = xyz_dotproduct(alpha, beta);
+
+	return alphasqr - dp * dp / betasqr;
+}
+
+__device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
+{
+	PointXYZ emerge = {
+		max(VSADX - VSADY, 0.0f) * spot.x / VSADX,
+		max(VSADY - VSADX, 0.0f) * spot.y / VSADY,
+		min(VSADX, VSADY)
+	};
+	PointXYZ spotloc = { spot.x, spot.y, 0 };
+
+	return line_nearest(emerge, spotloc, vox);
+}
+
 
 __host__ IMPTDose::IMPTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
 
@@ -149,64 +200,6 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 
 }
 
-/** @brief Dot product between two `PointXYZ`
- * 	@todo Take some time to create methods on `PointXYZ` later to simplify much
- * 		of this type of code wherever possible
- */
-__device__ float xyz_dotproduct(const PointXYZ &a, const PointXYZ &b)
-{
-	return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-/** @brief Compute the squared minimum distance between a line and an arbitrary
- * 		point
- * 	@param l0
- * 		"Starting" point on the line
- * 	@param l1
- * 		"Ending" point of the line segment
- * 	@param p
- * 		Test point, from which the nearest distance to the infinite line defined
- * 		by @p l0 and @p l1 will be computed
- * 	@returns The nearest distance squared, or `NaN` if @p l0 and @p l1 are the
- * 		same coordinates
- */
-__device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const PointXYZ &p)
-{
-	PointXYZ alpha = {
-		l0.x - p.x,
-		l0.y - p.y,
-		l0.z - p.z
-	}, beta = {
-		l1.x - l0.x,
-		l1.y - l0.y,
-		l1.z - l0.z
-	};
-	auto alphasqr = xyz_dotproduct(alpha, alpha);
-	auto betasqr = xyz_dotproduct(beta, beta);
-	auto dp = xyz_dotproduct(alpha, beta);
-
-	return alphasqr - dp * dp / betasqr;
-}
-
-/** @brief Compute the @b squared distance of voxel coordinates to their nearest
- * 		point on a pencil beam
- * 	@param spot
- * 		The pencil beam
- * 	@param vox
- * 		The voxel coordinates in BEV
- */
-__device__ float cax_distance(const Spot &spot, const PointXYZ &vox)
-{
-	PointXYZ emerge = {
-		max(VSADX - VSADY, 0.0f) * spot.x / VSADX,
-		max(VSADY - VSADX, 0.0f) * spot.y / VSADY,
-		min(VSADX, VSADY)
-	};
-	PointXYZ spotloc = { spot.x, spot.y, 0 };
-
-	return line_nearest(emerge, spotloc, vox);
-}
-
 __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	PointIJK vox_ijk;
@@ -261,7 +254,7 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	for (int spot_id=layer.spot_start; spot_id < spot_end; spot_id++){
 
 		const Spot &spot = beam->spots[spot_id];
-		auto distance_to_cax_sqr = cax_distance(spot, vox_head_xyz);
+		auto distance_to_cax_sqr = beam->caxDistance(spot, vox_head_xyz);
 
 		primary_dose = primary_dose_factor * expf(primary_scal * distance_to_cax_sqr);
 		halo_dose = halo_dose_factor * expf(halo_scal * distance_to_cax_sqr);
