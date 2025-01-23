@@ -67,6 +67,7 @@ class BeamClass {
         float gantry_angle;
         float couch_angle;
         float collimator_angle;
+        float mu;
 
         float singa, cosga; // Cached gantry angle trig functions
         float sinta, costa; // Cached couch angle trig functions

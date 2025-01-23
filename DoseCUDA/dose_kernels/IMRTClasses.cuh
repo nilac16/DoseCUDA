@@ -12,9 +12,14 @@ const float h_kernel[6][6] = {
 		{1.910, 	1.830, 		2.050, 		2.850, 		3.710, 		7.710},
 		{0.124e-1, 	0.666e-2, 	0.212e-2, 	0.954e-3, 	0.450e-3, 	0.333e-3},
 		{2.810e-1, 	0.253e-1, 	0.291e-1, 	0.244e-1, 	0.184e-1, 	0.185e-1},
-		{10.000, 	5.000, 		5.000, 		5.000, 		5.000, 		2.000}}; //this can be constant for all 6 MV photon machines, but needs to be updated for other photon energies
+		{3.000, 	2.000, 		2.000, 		2.000, 		2.000, 		1.000}}; //this can be constant for all 6 MV photon machines, but needs to be updated for other photon energies
+
+const float h_attenuation_coefficients[12] = {0.09687, 0.07072, 0.05754, 0.04942, 0.04385, 0.03969, 0.03637, 0.03403, 0.03230, 0.03031, 0.02905, 0.02770};
+const float h_energy_fluence[12] = {0.0665, 0.07343, 0.08641, 0.07452, 0.05684, 0.03993, 0.02819, 0.03607, 0, 0.01687, 0, 0.01091};
 
 __constant__ float g_kernel[6][6]; //TERMA to dose kernel
+__constant__ float g_attenuation_coefficients[12]; //attenuation coefficients
+__constant__ float g_energy_fluence[12]; //energy fluence
 
 
 class IMRTBeam : public CudaBeam{
@@ -23,7 +28,7 @@ class IMRTBeam : public CudaBeam{
 
         __host__ IMRTBeam(BeamClass * h_beam);
 
-        __device__ float headTransmission(const PointXYZ * point_xyz);
+        __device__ float headTransmission(const PointXYZ * point_xyz, const float distance_to_source, const float xSigma, const float ySigma);
 
 };
 

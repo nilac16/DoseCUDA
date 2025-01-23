@@ -270,7 +270,7 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		return NULL ;
 	}
 
-		if (!proton_array_typecheck(mlc, 2, NPY_FLOAT)) {
+	if (!proton_array_typecheck(mlc, 2, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "MLC array must be two-dimensional and of type float.");
 		return NULL ;
 	}
@@ -298,6 +298,7 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		HostPointer<MLCPair> MLCPairArray(n_mlc_pairs);
 		make_mlc_array(mlc, MLCPairArray);
 		beam_obj.n_mlc_pairs = n_mlc_pairs;
+		beam_obj.mu = mu;
 		beam_obj.mlc = MLCPairArray.get();
 
     	photon_dose_cuda(gpu_id, &dose_obj, &beam_obj);
@@ -353,6 +354,7 @@ static struct PyModuleDef dosemodule = {
 	-1,
 	DoseMethods,
 };
+
 
 PyMODINIT_FUNC PyInit_dose_kernels(void) {
 	import_array();

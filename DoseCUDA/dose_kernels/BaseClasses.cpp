@@ -110,6 +110,7 @@ BeamClass::BeamClass(BeamClass * h_beam){
 	this->gantry_angle = h_beam->gantry_angle;
 	this->couch_angle = h_beam->couch_angle;
 	this->collimator_angle = h_beam->collimator_angle;
+	this->mu = h_beam->mu;
 	this->singa = h_beam->singa;
 	this->cosga = h_beam->cosga;
 	this->sinta = h_beam->sinta;
