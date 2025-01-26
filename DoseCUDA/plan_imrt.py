@@ -54,6 +54,7 @@ class IMRTDoseGrid(DoseGrid):
             beam_dose = np.zeros(self.Density.shape, dtype=np.single)
 
             for cp in beam.cp_list:
+                print(cp.mu)
                 cp_dose = dose_kernels.photon_dose_cuda(
                     np.array(self.Density, dtype=np.single), 
                     np.array(beam.iso - self.origin, dtype=np.single), 
@@ -72,6 +73,8 @@ class IMRTDoseGrid(DoseGrid):
             self.dose += beam_dose
 
         self.dose *= plan.n_fractions
+        print(np.max(self.dose))
+        print(plan.n_fractions)
 
 
 class IMRTBeam(Beam):

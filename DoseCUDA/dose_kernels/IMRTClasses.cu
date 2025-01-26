@@ -4,6 +4,24 @@
 #endif
 #include "MemoryClasses.h"
 
+__host__ __device__ float interp(float x, const float * xd, const float * yd, const int n){
+
+	int i = 0;
+	while ((xd[i] < x) && (i < n)){
+		i++;
+	}
+
+	float y = 1.00;
+	if(i >= (n - 1)){
+		y = yd[n - 1];
+	}else if(i <= 0){
+		y = yd[0];
+	} else {
+		y = yd[i - 1] + ((yd[i] - yd[i - 1]) * (x - xd[i - 1]) / (xd[i] - xd[i - 1]));
+	}
+
+	return y;
+}
 
 __host__ IMRTBeam::IMRTBeam(BeamClass * h_beam) : CudaBeam(h_beam) {}
 
@@ -39,6 +57,16 @@ __device__ float IMRTBeam::headTransmission(const PointXYZ* point_xyz, const flo
 
 }
 
+__device__ void IMRTBeam::offAxisFactors(const PointXYZ * point_xyz, float * off_axis_factor, float * off_axis_softening){
+
+	const float distance_to_source = PRIMARY_SOURCE_DISTANCE - point_xyz->z;
+	const float distance_to_cax = sqrtf(powf(point_xyz->x, 2.0) + powf(point_xyz->y, 2.0)) * distance_to_source / PRIMARY_SOURCE_DISTANCE;
+	*off_axis_factor = interp(distance_to_cax, g_radius, g_profile, 20);
+	*off_axis_softening = interp(distance_to_cax, g_radius, g_soften, 20);
+
+}
+
+
 __host__ IMRTDose::IMRTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
 
 
@@ -61,21 +89,22 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 
 	float distance_to_primary_source = PRIMARY_SOURCE_DISTANCE - vox_head_xyz.z;
 	float distance_to_scatter_source = SCATTER_SOURCE_DISTANCE - vox_head_xyz.z;
-	float primary_transmission = beam->headTransmission(&vox_head_xyz, PRIMARY_SOURCE_DISTANCE, 1.0, 1.0);
-	float scatter_transmission = beam->headTransmission(&vox_head_xyz, SCATTER_SOURCE_DISTANCE, 20.0, 20.0);
+	float off_axis_factor, off_axis_softening;
+	beam->offAxisFactors(&vox_xyz, &off_axis_factor, &off_axis_softening);
+	float primary_transmission = beam->headTransmission(&vox_head_xyz, PRIMARY_SOURCE_DISTANCE, 3.0, 3.0);
+	float scatter_transmission = beam->headTransmission(&vox_head_xyz, SCATTER_SOURCE_DISTANCE, 30.0, 30.0);
 	float wet = dose->WETArray[vox_index];
-	float terma_primary = 0.f;
-	float terma_scatter = 0.f;
+	float terma = 0.f;
+	float electron = 0.f;
+	float transmission_ratio = fminf(1.0, scatter_transmission / primary_transmission);
 
 	for(int i = 0; i < 12; i++){
-		terma_primary += g_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet) * powf(PRIMARY_SOURCE_DISTANCE / distance_to_primary_source, 2.0);
-		terma_scatter += g_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet * 0.2) * powf(SCATTER_SOURCE_DISTANCE / distance_to_scatter_source, 2.0);
+		terma += (1.0 - transmission_ratio) * (g_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet) * powf(PRIMARY_SOURCE_DISTANCE / distance_to_primary_source, 2.0)) + 
+					transmission_ratio * g_scatter_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet) * (SCATTER_SOURCE_DISTANCE / distance_to_scatter_source);
 	}
 
-	TERMAArray[vox_index] = ((1.0 - SCATTER_SOURCE_WEIGHT) * primary_transmission * terma_primary) + (SCATTER_SOURCE_WEIGHT * scatter_transmission * terma_scatter);
-
-	ElectronArray[vox_index] = ELECTRON_WEIGHT * (primary_transmission * (1.0 - SCATTER_SOURCE_WEIGHT) * expf(-ELECTRON_MASS_ATTENUATION * wet) + 
-							SCATTER_SOURCE_WEIGHT * scatter_transmission * expf(-ELECTRON_MASS_ATTENUATION * wet));
+	TERMAArray[vox_index] = off_axis_factor * ((1.0 - SCATTER_SOURCE_WEIGHT) * primary_transmission * terma + SCATTER_SOURCE_WEIGHT * scatter_transmission * terma);
+	ElectronArray[vox_index] = electron;
 
     __syncthreads();
 
@@ -100,10 +129,10 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	PointXYZ tex_img_xyz;
 	dose->pointXYZtoTextureXYZ(&vox_img_xyz, &tex_img_xyz, beam);
 
-	if (TERMATexture.sample(tex_img_xyz) <= 0.01){
-		dose->DoseArray[vox_index] = 0.0;
-		return;
-	}
+	// if (TERMATexture.sample(tex_img_xyz) <= 0.01){
+	// 	dose->DoseArray[vox_index] = 0.0;
+	// 	return;
+	// }
 
 	PointXYZ vox_head_xyz;
 	dose->pointXYZImageToHead(&vox_img_xyz, &vox_head_xyz, beam);
@@ -130,7 +159,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 			float Di = AIR_DENSITY * sp;
 			float ray_length = g_kernel[5][i];
 
-			while(ray_length >= sp) {
+			while(ray_length >= 0) {
 
 				PointXYZ ray_head_xyz;
 				ray_head_xyz.x = fmaf(xr, ray_length * 10.0, vox_head_xyz.x);
@@ -188,6 +217,8 @@ void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 	DevicePointer<float> WETArray(MemoryTag::Zeroed(), h_dose->num_voxels);
 	DevicePointer<float> TERMAArray(MemoryTag::Zeroed(), h_dose->num_voxels);
 	DevicePointer<float> ElectronArray(MemoryTag::Zeroed(), h_dose->num_voxels);
+	// DevicePointer<float> d_off_axis_radii(h_beam->off_axis_radii, h_beam->off_axis_len);
+	// DevicePointer<float> d_off_axis_
 
 	d_dose.DensityArray = DensityArray.get();
 	d_dose.WETArray = WETArray.get();
@@ -203,6 +234,10 @@ void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 	cudaMemcpyToSymbol(g_kernel, h_kernel, 6 * 6 * sizeof(float));
 	cudaMemcpyToSymbol(g_attenuation_coefficients, h_attenuation_coefficients, 12 * sizeof(float));
 	cudaMemcpyToSymbol(g_energy_fluence, h_energy_fluence, 12 * sizeof(float));
+	cudaMemcpyToSymbol(g_scatter_energy_fluence, h_scatter_energy_fluence, 12 * sizeof(float));
+	cudaMemcpyToSymbol(g_profile, h_profile, 20 * sizeof(float));
+	cudaMemcpyToSymbol(g_soften, h_soften, 20 * sizeof(float));
+	cudaMemcpyToSymbol(g_radius, h_radius, 20 * sizeof(float));
 
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);

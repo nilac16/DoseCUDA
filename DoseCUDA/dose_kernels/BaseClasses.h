@@ -92,6 +92,11 @@ class BeamClass {
         float * lut_idds;
         int lut_len;
 
+        // float * off_axis_radii;
+        // float * off_axis_factors;
+        // float * off_axis_softening;
+        // int off_axis_len;
+
         BeamClass(float * iso, float gantry_angle, float couch_angle);
 
         BeamClass(float * iso, float gantry_angle, float couch_angle, float collimator_angle); 

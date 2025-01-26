@@ -123,6 +123,7 @@ BeamClass::BeamClass(BeamClass * h_beam){
 	this->n_mlc_pairs = h_beam->n_mlc_pairs;
 	this->dvp_len = h_beam->dvp_len;
 	this->lut_len = h_beam->lut_len;
+	// this->off_axis_len = h_beam->off_axis_len;
 
 }
 
