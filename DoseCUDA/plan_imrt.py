@@ -27,25 +27,23 @@ class IMRTDoseGrid(DoseGrid):
         super().__init__()
         self.Density = []
 
-
-    def DensityFromHU(self):
+    def DensityFromHU(self, machine_name):
                 
-        density_table_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "HU_RLSP.csv"))
+        density_table_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "HU_Density.csv"))
         df_density = pd.read_csv(density_table_path)
 
         hu_curve = df_density["HU"].to_numpy()
-        density_curve = df_density["RLSP"].to_numpy()
+        density_curve = df_density["Density"].to_numpy()
         
         density = np.array(np.interp(self.HU, hu_curve, density_curve), dtype=np.single)
         
         return density
 
-
     def computeIMRTPlan(self, plan, gpu_id=0):
             
         self.beam_doses = []
         self.dose = np.zeros(self.size, dtype=np.single)
-        self.Density = self.DensityFromHU()
+        self.Density = self.DensityFromHU(plan.machine_name)
 
         if self.spacing[0] != self.spacing[1] or self.spacing[0] != self.spacing[2]:
             raise Exception("Spacing must be isotropic for IMPT dose calculation - consider resampling CT")
@@ -54,7 +52,7 @@ class IMRTDoseGrid(DoseGrid):
             beam_dose = np.zeros(self.Density.shape, dtype=np.single)
 
             for cp in beam.cp_list:
-                print(cp.mu)
+                output_factor = plan.outputFactor(cp)
                 cp_dose = dose_kernels.photon_dose_cuda(
                     np.array(self.Density, dtype=np.single), 
                     np.array(beam.iso - self.origin, dtype=np.single), 
@@ -67,14 +65,12 @@ class IMRTDoseGrid(DoseGrid):
                     0.0, 
                     self.spacing[0],
                     gpu_id)
-                beam_dose += cp_dose
+                beam_dose += cp_dose * output_factor
                 
             self.beam_doses.append(beam_dose)
             self.dose += beam_dose
 
         self.dose *= plan.n_fractions
-        print(np.max(self.dose))
-        print(plan.n_fractions)
 
 
 class IMRTBeam(Beam):
@@ -84,7 +80,6 @@ class IMRTBeam(Beam):
         self.cp_list = []
         self.n_cps = 0
 
-
     def addControlPoint(self, cp):
         self.cp_list.append(cp)
         self.n_cps += 1
@@ -92,11 +87,13 @@ class IMRTBeam(Beam):
 
 class IMRTPlan(Plan):
 
-    def __init__(self):
+    def __init__(self, machine_name = "VarianTrueBeamHF"):
         
         super().__init__()
 
-        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "mlc_geometry.csv"))
+        self.machine_name = machine_name
+
+        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "mlc_geometry.csv"))
         mlc_geometry = pd.read_csv(mlc_geometry_path)
 
         self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
@@ -106,6 +103,12 @@ class IMRTPlan(Plan):
         self.mlc_distance_to_source = mlc_geometry["distance_to_source"].to_numpy()
         self.n_mlc_pairs = len(self.mlc_index)
 
+        machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "machine_parameters.csv"))
+        for line in open(machine_parameters_path):
+            if line.startswith('output_factor_equivalent_squares'):
+                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
+            if line.startswith('output_factor_values'):
+                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
 
     def readPlanDicom(self, plan_path):
 
@@ -186,3 +189,36 @@ class IMRTPlan(Plan):
                         cumulative_mu = cp.CumulativeMetersetWeight
                 
                 self.addBeam(imrt_beam)
+
+    def outputFactor(self, cp):
+    
+        min_y = 10000.0
+        max_y = -10000.0
+        max_x_diff = 0.0
+        area = 0.0
+        
+        for i in range(cp.mlc.shape[0]):
+
+            x1 = cp.mlc[i, 0]
+            x2 = cp.mlc[i, 1]
+            y_offset = cp.mlc[i, 2]
+            y_width = cp.mlc[i, 3]
+
+            area += (x2 - x1) * y_width
+
+            if (x2 - x1) > 3.0 and (x2 - x1) > max_x_diff:
+                max_x_diff = x2 - x1
+
+            if (x2 - x1) > 3.0:
+                if (y_offset - y_width / 2.0) < min_y:
+                    min_y = (y_offset - y_width / 2.0)
+                if (y_offset + y_width / 2.0) > max_y:
+                    max_y = (y_offset + y_width / 2.0)
+
+        perimeter = 2 * (max_y - min_y) + 2 * max_x_diff
+
+        equivalent_square = 4 * area / perimeter
+
+        output_factor = np.interp(equivalent_square, self.output_factor_equivalent_squares, self.output_factor_values)
+
+        return output_factor

@@ -17,9 +17,9 @@ class IMPTDoseGrid(DoseGrid):
         super().__init__()
         self.RLSP = []
 
-    def RLSPFromHU(self):
+    def RLSPFromHU(self, machine_name):
 
-        rlsp_table_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "HU_RLSP.csv"))
+        rlsp_table_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", machine_name, "HU_RLSP.csv"))
         df_rlsp = pd.read_csv(rlsp_table_path)
 
         hu_curve = df_rlsp["HU"].to_numpy()
@@ -33,7 +33,7 @@ class IMPTDoseGrid(DoseGrid):
 
         self.beam_doses = []
         self.dose = np.zeros(self.size, dtype=np.single)
-        self.RLSP = self.RLSPFromHU()
+        self.RLSP = self.RLSPFromHU(plan.machine_name)
 
         #check if spacing is isotropic
         if self.spacing[0] != self.spacing[1] or self.spacing[0] != self.spacing[2]:
@@ -120,20 +120,21 @@ class IMPTBeam(Beam):
 
 class IMPTPlan(Plan):
 
-    def __init__(self):
+    def __init__(self, machine_name = "HitachiProbeatJHU"):
         super().__init__()
+        self.machine_name = machine_name
         self.lut_depths = []
         self.lut_sigmas = []
         self.lut_idds = []
         self.divergence_params = []
-        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "energies.csv"))
+        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", machine_name, "energies.csv"))
         self.energy_table = pd.read_csv(energy_list_path)
         self.energy_labels = []
         self.loadLUT()
 
     def loadLUT(self):
 
-        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "energies.csv"))
+        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "energies.csv"))
         self.energy_table = pd.read_csv(energy_list_path)
 
         self.energy_labels = self.energy_table["energy_label"].to_numpy()
@@ -151,7 +152,7 @@ class IMPTPlan(Plan):
             lut_idds = []
             divergence_params = []
             
-            lut_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables/energy_%03d.csv" % energy_id))
+            lut_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "energy_%03d.csv" % energy_id))
 
             with open(lut_path, "r") as f:
                 f.readline() # header

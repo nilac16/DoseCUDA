@@ -18,8 +18,8 @@ const float h_attenuation_coefficients[12] = {0.09687, 0.07072, 0.05754, 0.04942
 const float h_energy_fluence[12] = {0.18004762, 0.18004762, 0.0682789,  0.03990357, 0.0403678,  0.02817274, 0.0261157,  0.02836988, 0.03217569, 0.10721887, 0.12699279, 0.14230882};
 const float h_scatter_energy_fluence[12] = {-0.49326286,  0.16015799,  0.29606239,  0.23461438,  0.299726,    0.25019492, 0.20748785,  0.09246743,  0.0702758,  -0.01659201, -0.05079632, -0.05033556};
 
-const float h_profile[] = 						{1.000, 1.005, 1.009, 1.014, 1.016, 1.011, 1.004, 0.993, 0.985, 0.985,
-												0.985, 0.985, 0.985, 0.875, 0.780, 0.692, 0.050, 0.010, 0.001, 0.001};
+const float h_profile[] = 						{1.000, 1.005, 1.009, 1.014, 1.016, 1.011, 1.004, 0.993, 0.985, 0.960,
+												0.940, 0.920, 0.900, 0.875, 0.780, 0.692, 0.050, 0.010, 0.001, 0.001};
 
 const float h_soften[] = 						{1.000, 1.040, 1.080, 1.120, 1.160, 1.200, 1.240, 1.300, 1.320, 1.360,
 												1.420, 1.440, 1.460, 1.480, 1.490, 1.500, 1.520, 1.560, 1.590, 1.600};
@@ -58,11 +58,6 @@ class IMRTDose : public CudaDose{
         __host__ IMRTDose(DoseClass * h_dose);
 
 };
-
-
-// __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam);
-
-// __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam);
 
 
 void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
