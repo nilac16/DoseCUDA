@@ -99,8 +99,8 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 	float transmission_ratio = fminf(1.00, scatter_transmission / primary_transmission);
 
 	for(int i = 0; i < 12; i++){
-		terma += (1.0 - transmission_ratio) * (g_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet) * powf(PRIMARY_SOURCE_DISTANCE / distance_to_primary_source, 2.0)) + 
-					transmission_ratio * g_scatter_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet) * (SCATTER_SOURCE_DISTANCE / distance_to_scatter_source);
+		terma += (1.0 - transmission_ratio) * (g_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet * off_axis_softening) * powf(PRIMARY_SOURCE_DISTANCE / distance_to_primary_source, 2.0)) + 
+					transmission_ratio * g_scatter_energy_fluence[i] * expf(-g_attenuation_coefficients[i] * wet * off_axis_softening) * (SCATTER_SOURCE_DISTANCE / distance_to_scatter_source);
 	}
 
 	electron = fmaxf(0.0, (expf(-ELECTRON_MASS_ATTENUATION * wet) - expf(-ELECTRON_MASS_ATTENUATION * 1.5)) / (1.0 - expf(-ELECTRON_MASS_ATTENUATION * 1.5)));
@@ -132,10 +132,10 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	PointXYZ tex_img_xyz;
 	dose->pointXYZtoTextureXYZ(&vox_img_xyz, &tex_img_xyz, beam);
 
-	if (TERMATexture.sample(tex_img_xyz) <= 0.01){
-		dose->DoseArray[vox_index] = 0.0;
-		return;
-	}
+	// if (TERMATexture.sample(tex_img_xyz) <= 0.01){
+	// 	dose->DoseArray[vox_index] = 0.0;
+	// 	return;
+	// }
 
 	PointXYZ vox_head_xyz;
 	dose->pointXYZImageToHead(&vox_img_xyz, &vox_head_xyz, beam);
