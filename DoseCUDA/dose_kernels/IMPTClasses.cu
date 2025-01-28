@@ -80,6 +80,57 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 
 }
 
+/** @brief Dot product between two `PointXYZ`
+ * 	@todo Take some time to create methods on `PointXYZ` later to simplify much
+ * 		of this type of code wherever possible
+ */
+__device__ float xyz_dotproduct(const PointXYZ &a, const PointXYZ &b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+/** @brief Compute the squared minimum distance between a line and an arbitrary
+ * 		point
+ * 	@param l0
+ * 		"Starting" point on the line
+ * 	@param l1
+ * 		"Ending" point of the line segment
+ * 	@param p
+ * 		Test point, from which the nearest distance to the infinite line defined
+ * 		by @p l0 and @p l1 will be computed
+ * 	@returns The nearest distance squared, or `NaN` if @p l0 and @p l1 are the
+ * 		same coordinates
+ */
+__device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const PointXYZ &p)
+{
+	PointXYZ alpha = {
+		l0.x - p.x,
+		l0.y - p.y,
+		l0.z - p.z
+	}, beta = {
+		l1.x - l0.x,
+		l1.y - l0.y,
+		l1.z - l0.z
+	};
+	auto alphasqr = xyz_dotproduct(alpha, alpha);
+	auto betasqr = xyz_dotproduct(beta, beta);
+	auto dp = xyz_dotproduct(alpha, beta);
+
+	return alphasqr - dp * dp / betasqr;
+}
+
+__device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
+{
+	PointXYZ emerge = {
+		max(VSADX - VSADY, 0.0f) * spot.x / VSADX,
+		max(VSADY - VSADX, 0.0f) * spot.y / VSADY,
+		min(VSADX, VSADY)
+	};
+	PointXYZ spotloc = { spot.x, spot.y, 0 };
+
+	return line_nearest(emerge, spotloc, vox);
+}
+
 
 __host__ IMPTDose::IMPTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
 
@@ -149,12 +200,6 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 
 }
 
-__device__ float gauss(float x, float s)
-{
-	x /= s;
-	return expf(-0.5 * x * x);
-}
-
 __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	PointIJK vox_ijk;
@@ -197,46 +242,22 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	float primary_dose_factor = (1.0 - halo_weight) * idd / (2.0 * CUDART_PI_F * sqr(sigma_total));
 	float halo_dose_factor = halo_weight * idd / (2.0 * CUDART_PI_F * sqr(sigma_halo_total));
 
-	float total_dose = 0.0, distance_to_cax, primary_dose, halo_dose;
+	float total_dose = 0.0, primary_dose, halo_dose;
 
 	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
-	float vx = vox_head_xyz.x;
-	float vy = vox_head_xyz.y;
-	float vz = -vox_head_xyz.z; // make z increase with distance from the source
-	float sx, sy, sz = (VSADX + VSADY) / 2.0;
 
 	const int spot_end = layer.spot_start + layer.n_spots;
+
+	const float primary_scal = sigma_total ? -0.5f / sqr(sigma_total) : -INFINITY;
+	const float halo_scal = sigma_halo_total ? -0.5f / sqr(sigma_halo_total) : -INFINITY;
 
 	for (int spot_id=layer.spot_start; spot_id < spot_end; spot_id++){
 
 		const Spot &spot = beam->spots[spot_id];
+		auto distance_to_cax_sqr = beam->caxDistance(spot, vox_head_xyz);
 
-		sx = spot.x;
-		sy = spot.y;
-
-		if ((fabsf(vx - sx) > 50.0) || (fabsf(vy - sy) > 50.0)){
-			continue;
-		}
-
-		{
-			float dx, dy, dz;
-
-			dx = sy * vz - sz * (vy - sy);
-			dy = sz * (vx - sx) - sx * vz;
-			dz = sx * (vy - sy) - sy * (vx - sx);
-
-			distance_to_cax = norm3df(dx, dy, dz) * rnorm3df(sx, sy, sz);
-		}
-
-		primary_dose = primary_dose_factor * gauss(distance_to_cax, sigma_total);
-		if (isnan(primary_dose)) {
-			continue;
-		}
-
-		halo_dose = halo_dose_factor * gauss(distance_to_cax, sigma_halo_total);
-		if (isnan(halo_dose)) {
-			continue;
-		}
+		primary_dose = primary_dose_factor * expf(primary_scal * distance_to_cax_sqr);
+		halo_dose = halo_dose_factor * expf(halo_scal * distance_to_cax_sqr);
 
 		total_dose = fmaf(spot.mu, primary_dose + halo_dose, total_dose);
 

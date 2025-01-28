@@ -18,6 +18,15 @@ class IMPTBeam : public CudaBeam{
 
         __device__ void nuclearHalo(const float wet, float * halo_sigma, float * halo_weight, size_t layer_id);
 
+        /** @brief Compute the @b squared distance of voxel coordinates to their
+         *      nearest point on a pencil beam
+         * 	@param spot
+         * 		The pencil beam
+         * 	@param vox
+         * 		The voxel coordinates in BEV
+         */
+        __device__ float caxDistance(const Spot &spot, const PointXYZ &vox);
+
 };
 
 class IMPTDose : public CudaDose{
