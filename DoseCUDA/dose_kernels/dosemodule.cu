@@ -1,6 +1,15 @@
 #include <algorithm>
-#include "dosemodule.h"
+
+#define PY_SSIZE_T_CLEAN
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <Python.h>
+#include <object.h>
+#include <numpy/arrayobject.h>
+
+#include "IMRTClasses.cuh"
+#include "IMPTClasses.cuh"
 #include "MemoryClasses.h"
+#include "model_params.h"
 
 
 /** @brief Check a NumPy array for dimensionality and contained element type
@@ -12,29 +21,28 @@
  * 		Required type constant
  * 	@returns true if the constraint is satisfied, false if not
  */
-static bool proton_array_typecheck(const PyArrayObject *arr,
-								   int					dim,
-								   int					type)
-{
+static bool proton_array_typecheck(const PyArrayObject *arr, int dim, int type) {
+
 	return PyArray_NDIM(arr) == dim && PyArray_TYPE(arr) == type;
 }
 
 
 /** @brief Fetch the array's data pointer as a pointer to T */
 template <class T>
-static T *pyarray_as(PyArrayObject *arr)
-{
+static T *pyarray_as(PyArrayObject *arr) {
+
 	return reinterpret_cast<T *>(PyArray_DATA(arr));
 }
 
 
-extern void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
+static IMPTBeam::Model proton_beam_model(void/* PyObject * model */) {
 
+	IMPTBeam::Model model;
 
-extern void proton_spot_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
-
-
-extern void photon_dose_cuda(int gpu_id, DoseClass * h_dose, BeamClass * h_beam);
+	model.vsadx = VSADX;
+	model.vsady = VSADY;
+	return model;
+}
 
 
 static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
@@ -72,13 +80,14 @@ static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
 			(size_t)PyArray_DIMS(density_array)[2],
 		};
 
-		DoseClass dose_obj = DoseClass(dims, spacing);
+		CudaDose dose_obj = CudaDose(dims, spacing);
 		HostPointer<float> WETArray(dose_obj.num_voxels);
 
 		dose_obj.DensityArray = pyarray_as<float>(density_array);
 		dose_obj.WETArray = WETArray.get();
 
-		BeamClass beam_obj = BeamClass(pyarray_as<float>(iso), adjusted_gantry_angle, couch_angle);
+		auto model = proton_beam_model();
+		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(iso), adjusted_gantry_angle, couch_angle, &model);
 
 		proton_raytrace_cuda(gpu_id, &dose_obj, &beam_obj);
 
@@ -190,7 +199,7 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 			(size_t)PyArray_DIMS(wet_array)[2],
 		};
 
-		DoseClass dose_obj = DoseClass(dims, density_spacing);
+		IMPTDose dose_obj = IMPTDose(dims, density_spacing);
 		HostPointer<float> DoseArray(dose_obj.num_voxels);
 
 		dose_obj.DoseArray = DoseArray.get();
@@ -198,7 +207,8 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 		dose_obj.WETArray = pyarray_as<float>(wet_array);
 
 		// Create beam
-		BeamClass beam_obj = BeamClass(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle);
+		auto model = proton_beam_model();
+		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, &model);
 		HostPointer<Layer> LayerArray(n_energies);
 		HostPointer<Spot> SpotArray(n_spots);
 
@@ -239,6 +249,20 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 
 }
 
+
+static IMRTBeam::Model photon_beam_model(void/* PyObject * model */) {
+
+	IMRTBeam::Model model;
+
+	model.air_density				= AIR_DENSITY;
+	model.mu_cal					= MU_CAL;
+	model.primary_src_dist			= PRIMARY_SOURCE_DISTANCE;
+	model.scatter_src_dist			= SCATTER_SOURCE_DISTANCE;
+	model.mlc_distance				= MLC_DISTANCE;
+	model.scatter_src_weight		= SCATTER_SOURCE_WEIGHT;
+	model.electron_mass_attenuation	= ELECTRON_MASS_ATTENUATION;
+	return model;
+}
 
 static PyObject * photon_dose(PyObject* self, PyObject* args) {
 
@@ -286,7 +310,7 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 			(size_t)PyArray_DIMS(density_array)[2],
 		};
 
-		DoseClass dose_obj = DoseClass(dims, voxel_sp);
+		IMRTDose dose_obj = IMRTDose(dims, voxel_sp);
 		HostPointer<float> WETArray(dose_obj.num_voxels);
 		HostPointer<float> DoseArray(dose_obj.num_voxels);
 
@@ -294,7 +318,8 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		dose_obj.WETArray = WETArray.get();
 		dose_obj.DoseArray = DoseArray.get();
 
-		BeamClass beam_obj = BeamClass(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, collimator_angle);
+		auto model = photon_beam_model();
+		IMRTBeam beam_obj = IMRTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, collimator_angle, &model);
 		HostPointer<MLCPair> MLCPairArray(n_mlc_pairs);
 		make_mlc_array(mlc, MLCPairArray);
 		beam_obj.n_mlc_pairs = n_mlc_pairs;
