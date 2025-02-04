@@ -4,8 +4,7 @@ Python_add_library(${MODULE_NAME} MODULE)
 
 target_sources(${MODULE_NAME}
     PRIVATE
-        dosemodule.cpp
-        BaseClasses.cpp
+        dosemodule.cu
         CudaClasses.cu
         IMPTClasses.cu
         IMRTClasses.cu

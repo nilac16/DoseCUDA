@@ -5,12 +5,13 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <iostream>
-#include "device_launch_parameters.h"
+#include <device_launch_parameters.h>
 #include <stdlib.h>
 #include <math_constants.h>
-#include "./BaseClasses.h"
-#include "./TextureClasses.cuh"
+#include "PointClasses.cuh"
+#include "TextureClasses.cuh"
 
+#define TILE_WIDTH 4
 
 static inline void cuda_check(cudaError_t err)
 {
@@ -22,23 +23,52 @@ static inline void cuda_check(cudaError_t err)
 #define CUDA_CHECK(err) cuda_check(err)
 
 
-class CudaBeam : public BeamClass{
+class CudaBeam{
 
     public:
 
-        __host__ CudaBeam(BeamClass * h_beam);
+        PointXYZ iso;
+        PointXYZ src;
+        float gantry_angle;
+        float couch_angle;
+
+        float singa, cosga; // Cached gantry angle trig functions
+        float sinta, costa; // Cached couch angle trig functions
+
+        __host__ CudaBeam(CudaBeam * h_beam);
+        __host__ CudaBeam(float * iso, float gantry_angle, float couch_angle, float src_dist);
 
         __device__ void unitVectorToSource(const PointXYZ * point_xyz, PointXYZ * uvec);
 
         __device__ float distanceToSource(const PointXYZ * point_xyz);
 
+        __device__ void pointXYZImageToHead(const PointXYZ * point_img, PointXYZ * point_head);
+
+        __device__ void pointXYZHeadToImage(const PointXYZ * point_head, PointXYZ * point_img);
+
+        __device__ void pointXYZClosestCAXPoint(const PointXYZ * point_xyz, PointXYZ * point_cax);
+
+        __device__ float pointXYZDistanceToCAX(const PointXYZ * point_head_xyz);
+
+        __device__ float pointXYZDistanceToSource(const PointXYZ * point_img_xyz);
+
 };
 
-class CudaDose : public DoseClass{
+class CudaDose{
 
     public:
 
-        __host__ CudaDose(DoseClass * h_dose);
+        PointIJK img_sz;
+        unsigned int num_voxels;
+
+        float spacing;
+
+        float * DoseArray;
+        float * DensityArray;
+        float * WETArray;
+
+        __host__ CudaDose(CudaDose * h_dose);
+        __host__ CudaDose(size_t img_sz[], float spacing);
 
         __device__ bool pointIJKWithinImage(const PointIJK * point_ijk) {
             return point_ijk->i < this->img_sz.i
@@ -56,32 +86,50 @@ class CudaDose : public DoseClass{
             return point_ijk->i + this->img_sz.i * (point_ijk->j + this->img_sz.j * point_ijk->k);
         }
 
-        __device__ void pointXYZtoTextureXYZ(const PointXYZ * point_xyz, PointXYZ * tex_xyz, BeamClass * beam) {
+        __device__ void pointXYZtoTextureXYZ(const PointXYZ * point_xyz, PointXYZ * tex_xyz, CudaBeam * beam) {
             tex_xyz->x = fmaf(1.0f / this->spacing, point_xyz->x + beam->iso.x, 0.5f);
             tex_xyz->y = fmaf(1.0f / this->spacing, point_xyz->y + beam->iso.y, 0.5f);
             tex_xyz->z = fmaf(1.0f / this->spacing, point_xyz->z + beam->iso.z, 0.5f);
         }
 
-        __device__ void pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * point_xyz, BeamClass * beam);
+        __device__ void pointIJKtoXYZ(const PointIJK * point_ijk, PointXYZ * point_xyz, CudaBeam * beam) {
+            point_xyz->x = (float)point_ijk->i * this->spacing - beam->iso.x;
+	        point_xyz->y = (float)point_ijk->j * this->spacing - beam->iso.y;
+	        point_xyz->z = (float)point_ijk->k * this->spacing - beam->iso.z;
+        }
 
-        __device__ void pointXYZtoIJK(const PointXYZ * point_xyz, PointIJK * point_ijk, BeamClass * beam) {
+        __device__ void pointXYZtoIJK(const PointXYZ * point_xyz, PointIJK * point_ijk, CudaBeam * beam) {
             point_ijk->i = (int)roundf((point_xyz->x + beam->iso.x) / this->spacing);
             point_ijk->j = (int)roundf((point_xyz->y + beam->iso.y) / this->spacing);
             point_ijk->k = (int)roundf((point_xyz->z + beam->iso.z) / this->spacing);
         }
 
-        __device__ void pointXYZImageToHead(const PointXYZ * point_img, PointXYZ * point_head, BeamClass * beam);
-
-        __device__ void pointXYZHeadToImage(const PointXYZ * point_head, PointXYZ * point_img, BeamClass * beam);
-
-        __device__ void pointXYZClosestCAXPoint(const PointXYZ * point_xyz, PointXYZ * point_cax, BeamClass * beam);
-
-        __device__ float pointXYZDistanceToCAX(const PointXYZ * point_head_xyz);
-
-        __device__ float pointXYZDistanceToSource(const PointXYZ * point_img_xyz, BeamClass * beam);
-
 };
 
 __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D DensityTexture);
+
+/** @brief Binary search to find the first instance of a key in a sorted array,
+ *      or alternatively, where such a key should be inserted to maintain sorted
+ *      ordering
+ *  @see https://docs.python.org/3/library/bisect.html#examples
+ *      for motivating examples and see
+ *      https://en.cppreference.com/w/cpp/algorithm/lower_bound
+ *      for the naming convention
+ */
+template <class T>
+__host__ __device__ static inline int lowerBound(const T data[], int len, T key) {
+
+    int l = 0, r = len;
+
+    while (l < r) {
+        int mid = (l + r) / 2;
+        if (key <= data[mid]) {
+            r = mid;
+        } else {
+            l = mid + 1;
+        }
+    }
+    return l;
+}
 
 #endif

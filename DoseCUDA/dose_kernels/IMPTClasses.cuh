@@ -1,16 +1,61 @@
 #ifndef IMPTCLASSES_H
 #define IMPTCLASSES_H
 
-#include "./CudaClasses.cuh"
+#include "CudaClasses.cuh"
 
+#define LUT_LENGTH 400
 
-#define TILE_WIDTH 4
+typedef struct {
+
+    float x;
+    float y;
+    float mu;
+    int energy_id;
+
+} Spot;
+
+typedef struct {
+
+    int spot_start; // Starting spot index
+    int n_spots;    // Total
+    int energy_id;  // For indexing LUTs
+
+    float r80;
+    float energy;
+
+} Layer;
 
 class IMPTBeam : public CudaBeam{
 
     public:
 
-        __host__ IMPTBeam(BeamClass * h_beam);
+        struct Model {
+            float vsadx;
+            float vsady;
+
+            float sourceDistance() const { return fmaxf(this->vsadx, this->vsady); }
+        } model;    // Beam model parameters
+
+        int n_energies; // Total energies
+
+        Layer * layers; // Layer information
+        int n_layers;   // Number of non-empty layers
+
+        Spot * spots;   // All spots, sorted by energy ID
+        int n_spots;    // Spot count
+
+        float * divergence_params;  // R80, energy, coefficients
+        int dvp_len;    // Length including R80 + energy (stride)
+
+        float * lut_depths;
+        float * lut_sigmas;
+        float * lut_idds;
+        int lut_len;
+
+        __host__ IMPTBeam(IMPTBeam * h_beam);
+        __host__ IMPTBeam(float * iso, float gantry_angle, float couch_angle, const Model * model);
+
+        __host__ void importLayers();
 
         __device__ void interpolateProtonLUT(float wet, float * idd, float * sigma, size_t layer_id);
 
@@ -33,17 +78,17 @@ class IMPTDose : public CudaDose{
 
     public:
 
-        __host__ IMPTDose(DoseClass * h_dose);
+        using CudaDose::CudaDose;
+
+        __host__ IMPTDose(CudaDose * h_dose);
 
 };
 
+__global__ void smoothRayKernel(IMPTDose * dose, CudaBeam * beam, float * SmoothedWETArray);
+__global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam);
 
-//__global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam);
-
-
-void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam);
-
-void proton_spot_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam);
+void proton_raytrace_cuda(int gpu_id, CudaDose * h_dose, CudaBeam  * h_beam);
+void proton_spot_cuda(int gpu_id, IMPTDose * h_dose, IMPTBeam  * h_beam);
 
 
 #endif

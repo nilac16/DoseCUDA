@@ -82,13 +82,6 @@ struct HostPointer: public UniquePointer<DataT, HostDeleter> {
 };
 
 
-/** #define DOSECUDA_DEVICE_POINTER in your source file to expose the CUDA smart
- *  pointer
- */
-#if defined(DOSECUDA_DEVICE_POINTER)
-#   include <cuda_runtime.h>
-
-
 struct CudaDeleter {
     void operator()(void *ptr) { cudaFree(ptr); }
 };
@@ -142,9 +135,6 @@ public:
         throw_if_bad(err);
     }
 };
-
-
-#endif /* DOSECUDA_DEVICE_POINTER */
 
 
 #endif /* MEMORY_CLASSES_H */

@@ -4,11 +4,7 @@
 #define TEXTURECLASSES_H
 
 #include <cuda_runtime.h>
-#ifndef DOSECUDA_DEVICE_POINTER
-#   define DOSECUDA_DEVICE_POINTER 1
-#endif /* DOSECUDA_DEVICE_POINTER */
-#include "BaseClasses.h"
-#include "MemoryClasses.h"
+#include "PointClasses.cuh"
 
 
 class Texture3D {

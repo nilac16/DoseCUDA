@@ -1,12 +1,66 @@
 #include "./IMPTClasses.cuh"
-#ifndef DOSECUDA_DEVICE_POINTER
-#	define DOSECUDA_DEVICE_POINTER
-#endif
 #include "MemoryClasses.h"
 
 
-__host__ IMPTBeam::IMPTBeam(BeamClass * h_beam) : CudaBeam(h_beam) {}
+__host__ IMPTBeam::IMPTBeam(IMPTBeam * h_beam) : CudaBeam(h_beam) {
+	this->model = h_beam->model;
+	this->n_energies = h_beam->n_energies;
+	this->n_layers = h_beam->n_layers;
+	this->n_spots = h_beam->n_spots;
+	this->dvp_len = h_beam->dvp_len;
+	this->lut_len = h_beam->lut_len;
+}
 
+__host__ IMPTBeam::IMPTBeam(float * iso, float gantry_angle, float couch_angle, const Model * model) : CudaBeam(iso, gantry_angle, couch_angle, model->sourceDistance()) {
+	this->model = *model;
+}
+
+/** @brief Count spots in a subarray
+ * 	@param spots
+ * 		Spots array
+ * 	@param n_spots
+ * 		Size of the spots array
+ * 	@param start
+ * 		Beginning index
+ * 	@param energy
+ * 		Energy to count
+ * 	@returns The number of spots starting from @p spots with energy ID @p energy
+ */
+static int count_spots(const Spot spots[], int n_spots, int start, int energy) {
+
+	int end;
+
+	for (end = start; end < n_spots && spots[end].energy_id == energy; end++);
+	return end - start;
+}
+
+__host__ void IMPTBeam::importLayers(){
+
+	int spot_start = 0, spot_count;
+
+	this->n_layers = 0;
+	for (int energy_id = 0; energy_id < this->n_energies; energy_id++) {
+		spot_count = count_spots(this->spots, this->n_spots, spot_start, energy_id);
+		if (!spot_count) {
+			/* No spots in this layer */
+			continue;
+		}
+
+		Layer &layer = this->layers[this->n_layers];
+
+		layer.spot_start = spot_start;
+		layer.n_spots = spot_count;
+		layer.energy_id = energy_id;
+
+		layer.r80 = this->divergence_params[this->dvp_len * energy_id + 1];
+		layer.energy = this->divergence_params[this->dvp_len * energy_id];
+
+		this->n_layers++;
+
+		spot_start += spot_count;
+	}
+
+}
 
 __device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * sigma, size_t layer_id){
 
@@ -17,26 +71,18 @@ __device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * s
 	sigmas = this->lut_sigmas + layer.energy_id * this->lut_len;
 	idds = this->lut_idds + layer.energy_id * this->lut_len;
 
-	int i = 0, j = this->lut_len, mid;
+	int i = lowerBound(depths, this->lut_len, wet);
 
-	do {
-		mid = (i + j) / 2;
-		if (wet < depths[mid]) {
-			j = mid;
-		} else {
-			i = mid + 1;
-		}
-	} while (i < j);
-
-	if (i >= this->lut_len-1){
-		*idd = idds[this->lut_len-1];
-		*sigma = sigmas[this->lut_len-1];
-	} else if (i <= 1) {
-		*idd = idds[0];
-		*sigma = sigmas[0];
+	if (i == this->lut_len) {
+		*idd = idds[i - 1];
+		*sigma = sigmas[i - 1];
+	} else if (i == 0) {
+		*idd = idds[i];
+		*sigma = sigmas[i];
 	} else {
-		*idd = (((idds[i] - idds[i-1]) / (depths[i] - depths[i-1])) * (wet - depths[i-1])) + idds[i-1];
-		*sigma = (((sigmas[i] - sigmas[i-1]) / (depths[i] - depths[i-1])) * (wet - depths[i-1])) + sigmas[i-1];
+		auto factor = (wet - depths[i - 1]) / (depths[i] - depths[i - 1]);
+		*idd = fmaf(idds[i] - idds[i - 1], factor, idds[i - 1]);
+		*sigma = fmaf(sigmas[i] - sigmas[i - 1], factor, sigmas[i - 1]);
 	}
 
 }
@@ -80,15 +126,6 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 
 }
 
-/** @brief Dot product between two `PointXYZ`
- * 	@todo Take some time to create methods on `PointXYZ` later to simplify much
- * 		of this type of code wherever possible
- */
-__device__ float xyz_dotproduct(const PointXYZ &a, const PointXYZ &b)
-{
-	return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
 /** @brief Compute the squared minimum distance between a line and an arbitrary
  * 		point
  * 	@param l0
@@ -122,9 +159,9 @@ __device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const Poin
 __device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
 {
 	PointXYZ emerge = {
-		max(VSADX - VSADY, 0.0f) * spot.x / VSADX,
-		max(VSADY - VSADX, 0.0f) * spot.y / VSADY,
-		min(VSADX, VSADY)
+		fmaxf(model.vsadx - model.vsady, 0.0f) * spot.x / model.vsadx,
+		fmaxf(model.vsady - model.vsadx, 0.0f) * spot.y / model.vsady,
+		fminf(model.vsadx, model.vsady)
 	};
 	PointXYZ spotloc = { spot.x, spot.y, 0 };
 
@@ -132,10 +169,10 @@ __device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
 }
 
 
-__host__ IMPTDose::IMPTDose(DoseClass * h_dose) : CudaDose(h_dose) {}
+__host__ IMPTDose::IMPTDose(CudaDose * h_dose) : CudaDose(h_dose) {}
 
 
-__global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * SmoothedWETArray){
+__global__ void smoothRayKernel(IMPTDose * dose, CudaBeam * beam, float * SmoothedWETArray){
 
 	PointIJK vox_ijk;
 	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -167,7 +204,7 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 	float conv_wet_sum = dose->WETArray[vox_index];
 	int n_voxels = 1;
 
-	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
+	beam->pointXYZImageToHead(&vox_xyz, &vox_head_xyz);
 
 	for (int i=0; i<6; i++){
 		float sinx, cosx;
@@ -181,7 +218,7 @@ __global__ void smoothRayKernel(IMPTDose * dose, IMPTBeam * beam, float * Smooth
 			vox_head_xyz_conv.y = vox_head_xyz.y + (dr * sinx);
 			vox_head_xyz_conv.z = vox_head_xyz.z;
 
-			dose->pointXYZHeadToImage(&vox_head_xyz_conv, &vox_image_xyz_conv, beam);
+			beam->pointXYZHeadToImage(&vox_head_xyz_conv, &vox_image_xyz_conv);
 			dose->pointXYZtoIJK(&vox_image_xyz_conv, &vox_ijk_conv, beam);
 
 			if(dose->pointIJKWithinImage(&vox_ijk_conv)){
@@ -230,7 +267,7 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	float sigma_ms, idd;
 	beam->interpolateProtonLUT(wet, &idd, &sigma_ms, layer_id);
 
-	float distance_to_source = dose->pointXYZDistanceToSource(&vox_xyz, beam);
+	float distance_to_source = beam->pointXYZDistanceToSource(&vox_xyz);
 	float sigma_total = beam->sigmaAir(wet, distance_to_source, layer_id) + sigma_ms;
 
 	float sigma_halo, halo_weight;
@@ -244,7 +281,7 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	float total_dose = 0.0, primary_dose, halo_dose;
 
-	dose->pointXYZImageToHead(&vox_xyz, &vox_head_xyz, beam);
+	beam->pointXYZImageToHead(&vox_xyz, &vox_head_xyz);
 
 	const int spot_end = layer.spot_start + layer.n_spots;
 
@@ -270,22 +307,20 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 }
 
 
-void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
+void proton_raytrace_cuda(int gpu_id, CudaDose * h_dose, CudaBeam  * h_beam){
 
 	CUDA_CHECK(cudaSetDevice(gpu_id));
 
 	IMPTDose d_dose(h_dose);
-	IMPTBeam d_beam(h_beam);
+	CudaBeam d_beam(h_beam);
 
-	DevicePointer<float> DensityArray(h_dose->DensityArray, h_dose->num_voxels);
 	DevicePointer<float> WETArray(h_dose->num_voxels);
 	DevicePointer<float> SmoothedWETArray(d_dose.num_voxels);
 
-	d_dose.DensityArray = DensityArray.get();
 	d_dose.WETArray = WETArray.get();
 
 	DevicePointer<IMPTDose> d_dose_ptr(&d_dose);
-	DevicePointer<IMPTBeam> d_beam_ptr(&d_beam);
+	DevicePointer<CudaBeam> d_beam_ptr(&d_beam);
 
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);
@@ -299,7 +334,7 @@ void proton_raytrace_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
 
 }
 
-void proton_spot_cuda(int gpu_id, DoseClass * h_dose, BeamClass  * h_beam){
+void proton_spot_cuda(int gpu_id, IMPTDose * h_dose, IMPTBeam  * h_beam){
 
 	CUDA_CHECK(cudaSetDevice(gpu_id));
 
