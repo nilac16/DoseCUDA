@@ -1,4 +1,4 @@
-from .plan import Plan, Beam, DoseGrid
+from .plan import Plan, Beam, DoseGrid, VolumeObject
 import sys
 import os
 sys.path.append(os.path.dirname(__file__))
@@ -9,9 +9,183 @@ import pkg_resources
 import dose_kernels
 
 
+class IMRTBeamModel:
+
+    def __init__(self, path_to_model):
+        
+        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "mlc_geometry.csv"))
+        mlc_geometry = pd.read_csv(mlc_geometry_path)
+
+        self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
+        self.mlc_widths = mlc_geometry["width"].to_numpy()
+        self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
+        self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
+        self.n_mlc_pairs = len(self.mlc_index)
+
+        kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "kernel.csv"))
+        kernel = pd.read_csv(kernel_path)
+        self.kernel = kernel.to_numpy()
+
+        print(self.kernel.shape)
+        print(self.kernel)
+
+        machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_parameters.csv"))
+
+        self.output_factor_equivalent_squares = None
+        self.output_factor_values = None
+        self.mu_calibration = None
+        self.primary_source_distance = None
+        self.scatter_source_distance = None
+        self.mlc_distance = None
+        self.scatter_source_weight = None
+        self.electron_mass_attenuation_coefficient = None
+        self.primary_source_size = None
+        self.scatter_source_size = None
+        self.profile_radius = None
+        self.profile_intensities = None
+        self.profile_softening = None
+        self.spectrum_attenuation_coefficients = None
+        self.spectrum_primary_weights = None
+        self.spectrum_scatter_weights = None
+
+        for line in open(machine_parameters_path):
+
+            if line.startswith('output_factor_equivalent_squares'):
+                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('output_factor_values'):
+                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('mu_calibration'):
+                self.mu_calibration = float(line.split(',')[1])
+
+            if line.startswith('primary_source_distance'):
+                self.primary_source_distance = float(line.split(',')[1])
+
+            if line.startswith('scatter_source_distance'):
+                self.scatter_source_distance = float(line.split(',')[1])
+
+            if line.startswith('mlc_distance'):
+                self.mlc_distance = float(line.split(',')[1])
+
+            if line.startswith('scatter_source_weight'):
+                self.scatter_source_weight = float(line.split(',')[1])
+
+            if line.startswith('electron_mass_attenuation_coefficient'):
+                self.electron_mass_attenuation_coefficient = float(line.split(',')[1])
+
+            if line.startswith('primary_source_size'):
+                self.primary_source_size = float(line.split(',')[1])
+
+            if line.startswith('scatter_source_size'):
+                self.scatter_source_size = float(line.split(',')[1])
+
+            if line.startswith('profile_radius'):
+                self.profile_radius = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('profile_intensities'):
+                self.profile_intensities = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('profile_softening'):
+                self.profile_softening = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('spectrum_attenuation_coefficients'):
+                self.spectrum_attenuation_coefficients = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('spectrum_primary_weights'):
+                self.spectrum_primary_weights = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('spectrum_scatter_weights'):
+                self.spectrum_scatter_weights = np.array(line.split(',')[1:], dtype=np.single)
+
+
+        if self.output_factor_equivalent_squares is None:
+            raise Exception("output_factor_equivalent_squares not found in machine_parameters.csv")
+        
+        if self.output_factor_values is None:
+            raise Exception("output_factor_values not found in machine_parameters.csv")
+        
+        if self.mu_calibration is None:
+            raise Exception("mu_calibration not found in machine_parameters.csv")
+
+        if self.primary_source_distance is None:
+            raise Exception("primary_source_distance not found in machine_parameters.csv")
+        
+        if self.scatter_source_distance is None:
+            raise Exception("scatter_source_distance not found in machine_parameters.csv")
+        
+        if self.mlc_distance is None:
+            raise Exception("mlc_distance not found in machine_parameters.csv")
+        
+        if self.scatter_source_weight is None:
+            raise Exception("scatter_source_weight not found in machine_parameters.csv")
+        
+        if self.electron_mass_attenuation_coefficient is None:
+            raise Exception("electron_mass_attenuation_coefficient not found in machine_parameters.csv")
+        
+        if self.primary_source_size is None:
+            raise Exception("primary_source_size not found in machine_parameters.csv")
+        
+        if self.scatter_source_size is None:
+            raise Exception("scatter_source_size not found in machine_parameters.csv")
+        
+        if self.profile_radius is None:
+            raise Exception("profile_radius not found in machine_parameters.csv")
+        
+        if self.profile_intensities is None:
+            raise Exception("profile_intensities not found in machine_parameters.csv")
+        
+        if self.profile_softening is None:
+            raise Exception("profile_softening not found in machine_parameters.csv")
+        
+        if self.spectrum_attenuation_coefficients is None:
+            raise Exception("spectrum_attenuation_coefficients not found in machine_parameters.csv")
+        
+        if self.spectrum_primary_weights is None:
+            raise Exception("spectrum_primary_weights not found in machine_parameters.csv")
+        
+        if self.spectrum_scatter_weights is None:
+            raise Exception("spectrum_scatter_weights not found in machine_parameters.csv")
+
+
+    def outputFactor(self, cp):
+    
+        min_y = 10000.0
+        max_y = -10000.0
+        max_x_diff = 0.0
+        area = 0.0
+        
+        for i in range(cp.mlc.shape[0]):
+
+            x1 = cp.mlc[i, 0]
+            x2 = cp.mlc[i, 1]
+            y_offset = cp.mlc[i, 2]
+            y_width = cp.mlc[i, 3]
+
+            area += (x2 - x1) * y_width
+
+            if (x2 - x1) > 3.0 and (x2 - x1) > max_x_diff:
+                max_x_diff = x2 - x1
+
+            if (x2 - x1) > 3.0:
+                if (y_offset - y_width / 2.0) < min_y:
+                    min_y = (y_offset - y_width / 2.0)
+                if (y_offset + y_width / 2.0) > max_y:
+                    max_y = (y_offset + y_width / 2.0)
+
+        perimeter = 2 * (max_y - min_y) + 2 * max_x_diff
+
+        equivalent_square = 4 * area / perimeter
+
+        output_factor = np.interp(equivalent_square, self.output_factor_equivalent_squares, self.output_factor_values)
+
+        return output_factor
+       
+
 class IMRTControlPoint:
 
-    def __init__(self, mu, mlc, ga, ca, ta, xjaws, yjaws):
+    def __init__(self, iso, mu, mlc, ga, ca, ta, xjaws, yjaws):
+        self.iso = iso
         self.mu = mu
         self.mlc = mlc
         self.ga = ga
@@ -47,24 +221,18 @@ class IMRTDoseGrid(DoseGrid):
 
         if self.spacing[0] != self.spacing[1] or self.spacing[0] != self.spacing[2]:
             raise Exception("Spacing must be isotropic for IMPT dose calculation - consider resampling CT")
+        
+        density_object = VolumeObject()
+        density_object.voxel_data = np.array(self.Density, dtype=np.single)
+        density_object.origin = np.array(self.origin, dtype=np.single)
+        density_object.spacing = np.array(self.spacing, dtype=np.single)
 
         for beam in plan.beam_list:
             beam_dose = np.zeros(self.Density.shape, dtype=np.single)
-
+            beam_model = plan.beam_model
             for cp in beam.cp_list:
-                output_factor = plan.outputFactor(cp)
-                cp_dose = dose_kernels.photon_dose_cuda(
-                    np.array(self.Density, dtype=np.single), 
-                    np.array(beam.iso - self.origin, dtype=np.single), 
-                    cp.mu, 
-                    np.array(cp.mlc, dtype=np.single),
-                    cp.ga, 
-                    cp.ca, 
-                    cp.ta, 
-                    0.0,
-                    0.0, 
-                    self.spacing[0],
-                    gpu_id)
+                output_factor = plan.beam_model.outputFactor(cp)
+                cp_dose = dose_kernels.photon_dose_cuda(beam_model, density_object, cp, gpu_id)
                 beam_dose += cp_dose * output_factor
                 
             self.beam_doses.append(beam_dose)
@@ -92,23 +260,24 @@ class IMRTPlan(Plan):
         super().__init__()
 
         self.machine_name = machine_name
+        self.beam_model = IMRTBeamModel(os.path.join("lookuptables", "photons", machine_name))
 
-        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "mlc_geometry.csv"))
-        mlc_geometry = pd.read_csv(mlc_geometry_path)
+        # mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "mlc_geometry.csv"))
+        # mlc_geometry = pd.read_csv(mlc_geometry_path)
 
-        self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
-        self.mlc_widths = mlc_geometry["width"].to_numpy()
-        self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
-        self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
-        self.mlc_distance_to_source = mlc_geometry["distance_to_source"].to_numpy()
-        self.n_mlc_pairs = len(self.mlc_index)
+        # self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
+        # self.mlc_widths = mlc_geometry["width"].to_numpy()
+        # self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
+        # self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
+        # self.mlc_distance_to_source = mlc_geometry["distance_to_source"].to_numpy()
+        # self.n_mlc_pairs = len(self.mlc_index)
 
-        machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "machine_parameters.csv"))
-        for line in open(machine_parameters_path):
-            if line.startswith('output_factor_equivalent_squares'):
-                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
-            if line.startswith('output_factor_values'):
-                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
+        # machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "machine_parameters.csv"))
+        # for line in open(machine_parameters_path):
+        #     if line.startswith('output_factor_equivalent_squares'):
+        #         self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
+        #     if line.startswith('output_factor_values'):
+        #         self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
 
     def readPlanDicom(self, plan_path):
 
@@ -148,28 +317,28 @@ class IMRTPlan(Plan):
                         mu = cp.CumulativeMetersetWeight - cumulative_mu
 
                         if mlc is not None:
-                            mlc = np.reshape(mlc, (2, self.n_mlc_pairs))
-                            mlc = np.array(np.vstack((mlc, self.mlc_offsets.reshape(1, -1), self.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.reshape(mlc, (2, self.beam_model.n_mlc_pairs))
+                            mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
                             mlc = np.transpose(mlc)
 
                         else:
 
-                            mlc = np.zeros((2, self.n_mlc_pairs), dtype=np.single)
+                            mlc = np.zeros((2, self.beam_model.n_mlc_pairs), dtype=np.single)
 
                             if xjaws is not None:
                                 mlc[0, :] = xjaws[0]
                                 mlc[1, :] = xjaws[1]
 
                             if yjaws is not None:
-                                for i in range(self.n_mlc_pairs):
-                                    if(self.mlc_offsets[i] < yjaws[0]) or (self.mlc_offsets[i] > yjaws[1]):
+                                for i in range(self.beam_model.n_mlc_pairs):
+                                    if(self.beam_model.mlc_offsets[i] < yjaws[0]) or (self.beam_model.mlc_offsets[i] > yjaws[1]):
                                         mlc[0, i] = 0.0
                                         mlc[1, i] = 0.0
                             
-                            mlc = np.array(np.vstack((mlc, self.mlc_offsets.reshape(1, -1), self.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
                             mlc = np.transpose(mlc)
 
-                        control_point = IMRTControlPoint(mu * total_mu, mlc, ga, ca, ta, xjaws, yjaws)
+                        control_point = IMRTControlPoint(imrt_beam.iso, mu * total_mu, mlc, ga, ca, ta, xjaws, yjaws)
                         
                         imrt_beam.addControlPoint(control_point)
 
@@ -189,36 +358,3 @@ class IMRTPlan(Plan):
                         cumulative_mu = cp.CumulativeMetersetWeight
                 
                 self.addBeam(imrt_beam)
-
-    def outputFactor(self, cp):
-    
-        min_y = 10000.0
-        max_y = -10000.0
-        max_x_diff = 0.0
-        area = 0.0
-        
-        for i in range(cp.mlc.shape[0]):
-
-            x1 = cp.mlc[i, 0]
-            x2 = cp.mlc[i, 1]
-            y_offset = cp.mlc[i, 2]
-            y_width = cp.mlc[i, 3]
-
-            area += (x2 - x1) * y_width
-
-            if (x2 - x1) > 3.0 and (x2 - x1) > max_x_diff:
-                max_x_diff = x2 - x1
-
-            if (x2 - x1) > 3.0:
-                if (y_offset - y_width / 2.0) < min_y:
-                    min_y = (y_offset - y_width / 2.0)
-                if (y_offset + y_width / 2.0) > max_y:
-                    max_y = (y_offset + y_width / 2.0)
-
-        perimeter = 2 * (max_y - min_y) + 2 * max_x_diff
-
-        equivalent_square = 4 * area / perimeter
-
-        output_factor = np.interp(equivalent_square, self.output_factor_equivalent_squares, self.output_factor_values)
-
-        return output_factor

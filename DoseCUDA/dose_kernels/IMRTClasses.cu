@@ -271,10 +271,10 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	PointXYZ tex_img_xyz;
 	dose->pointXYZtoTextureXYZ(&vox_img_xyz, &tex_img_xyz, beam);
 
-	// if (TERMATexture.sample(tex_img_xyz) <= 0.01){
-	// 	dose->DoseArray[vox_index] = 0.0;
-	// 	return;
-	// }
+	if (TERMATexture.sample(tex_img_xyz) <= 0.01){
+		dose->DoseArray[vox_index] = 0.0;
+		return;
+	}
 
 	PointXYZ vox_head_xyz;
 	beam->pointXYZImageToHead(&vox_img_xyz, &vox_head_xyz);

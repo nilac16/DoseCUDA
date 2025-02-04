@@ -264,50 +264,163 @@ static IMRTBeam::Model photon_beam_model(void/* PyObject * model */) {
 	return model;
 }
 
+
 static PyObject * photon_dose(PyObject* self, PyObject* args) {
 
-	PyArrayObject *density_array, *mlc, *isocenter;
-    double mu, gantry_angle, collimator_angle, couch_angle, jaw1, jaw2, voxel_sp;
-    int gpu_id;
+	PyObject *model_instance, *volume_instance, *cp_instance;
+	int gpu_id;	
 
-    if (!PyArg_ParseTuple(args, "O!O!dO!ddddddi", 
-			&PyArray_Type, &density_array, 
-			&PyArray_Type, &isocenter, 
-			&mu, 
-			&PyArray_Type, &mlc,
-    		&gantry_angle, 
-			&collimator_angle, 
-			&couch_angle, 
-			&jaw1, 
-			&jaw2, 
-			&voxel_sp, 
-			&gpu_id))
+	// parse arguments
+    if (!PyArg_ParseTuple(args, "OOOi", &model_instance, &volume_instance, &cp_instance, &gpu_id))
         return NULL;
 
+	PyObject *model_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan_imrt"), "IMRTBeamModel");
+    if (!model_class || !PyObject_IsInstance(model_instance, model_class)) {
+        PyErr_SetString(PyExc_TypeError, "Argument 1 must be an instance of IMRTBeamModel");
+        return NULL;
+    }
+
+	PyObject *volume_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan"), "VolumeObject");
+    if (!volume_class || !PyObject_IsInstance(volume_instance, volume_class)) {
+        PyErr_SetString(PyExc_TypeError, "Argument 2 must be an instance of VolumeObject");
+        return NULL;
+    }
+
+	PyObject *cp_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan_imrt"), "IMRTControlPoint");
+    if (!cp_class || !PyObject_IsInstance(cp_instance, cp_class)) {
+        PyErr_SetString(PyExc_TypeError, "Argument 3 must be an instance of IMRTControlPoint");
+        return NULL;
+    }
+
+	// check volume data properties
+	PyObject *density_object = PyObject_GetAttrString(volume_instance, "voxel_data");
+    if (!density_object) {
+        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'voxel_data'");
+        return NULL;
+    }
+
+	PyArrayObject *density_array = (PyArrayObject *) density_object;
 	if (!proton_array_typecheck(density_array, 3, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
+		PyErr_SetString(PyExc_ValueError, "'voxel_data' must be three-dimensional and of type float.");
 		return NULL ;
 	}
 
-	if (!proton_array_typecheck(isocenter, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
+	PyObject *spacing_object = PyObject_GetAttrString(volume_instance, "spacing");
+    if (!spacing_object) {
+        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'spacing'");
+        return NULL;
+    }
+	
+	PyArrayObject *spacing_array = (PyArrayObject *) spacing_object;
+	if (!proton_array_typecheck(spacing_array, 1, NPY_FLOAT)) {
+		PyErr_SetString(PyExc_ValueError, "'spacing' must be one-dimensional and of type float.");
 		return NULL ;
 	}
 
-	if (!proton_array_typecheck(mlc, 2, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "MLC array must be two-dimensional and of type float.");
+	PyObject *origin_object = PyObject_GetAttrString(volume_instance, "origin");
+    if (!origin_object) {
+        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'origin'");
+        return NULL;
+    }
+
+	PyArrayObject *origin_array = (PyArrayObject *) origin_object;
+	if (!proton_array_typecheck(origin_array, 1, NPY_FLOAT)) {
+		PyErr_SetString(PyExc_ValueError, "'origin' must be one-dimensional and of type float.");
 		return NULL ;
 	}
 
-	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
-	size_t n_mlc_pairs = PyArray_DIM(mlc, 0);
+	// check control point data properties
+	PyObject *iso_object = PyObject_GetAttrString(cp_instance, "iso");
+    if (!iso_object) {
+        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'iso'");
+        return NULL;
+    }
+
+	PyArrayObject *iso_array = (PyArrayObject *) iso_object;
+	if (!proton_array_typecheck(iso_array, 1, NPY_FLOAT)) {
+		PyErr_SetString(PyExc_ValueError, "'iso' must be one-dimensional and of type float.");
+		return NULL ;
+	}
+
+	PyObject *mlc_object = PyObject_GetAttrString(cp_instance, "mlc");
+    if (!mlc_object) {
+        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'mlc'");
+        return NULL;
+    }
+
+	PyArrayObject *mlc_array = (PyArrayObject *) mlc_object;
+	if (!proton_array_typecheck(mlc_array, 2, NPY_FLOAT)) {
+		PyErr_SetString(PyExc_ValueError, "'mlc' must be two-dimensional and of type float.");
+		return NULL ;
+	}
+
+	PyObject *mu_object = PyObject_GetAttrString(cp_instance, "mu");
+    if (!mu_object) {
+        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'mu'");
+        return NULL;
+    }
+
+	double mu = PyFloat_AsDouble(mu_object);
+	Py_DECREF(mu_object);
+
+	PyObject *gantry_object = PyObject_GetAttrString(cp_instance, "ga");
+	if (!gantry_object) {
+		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ga'");
+		return NULL;
+	}
+
+	double ga = PyFloat_AsDouble(gantry_object);
+	Py_DECREF(gantry_object);
+
+	PyObject *collimator_object = PyObject_GetAttrString(cp_instance, "ca");
+	if (!collimator_object) {
+		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ca'");
+		return NULL;
+	}
+
+	double ca = PyFloat_AsDouble(collimator_object);
+	Py_DECREF(collimator_object);
+
+	PyObject *couch_object = PyObject_GetAttrString(cp_instance, "ta");
+	if (!couch_object) {
+		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ta'");
+		return NULL;
+	}
+
+	double ta = PyFloat_AsDouble(couch_object);
+	Py_DECREF(couch_object);
+
+	// beam model 
+	PyObject *mu_cal_object = PyObject_GetAttrString(model_instance, "mu_calibration");
+	if (!mu_cal_object) {
+		PyErr_SetString(PyExc_AttributeError, "IMRTBeamModel instance has no attribute 'mu_calibration'");
+		return NULL;
+	}
+
+	double mu_cal = PyFloat_AsDouble(mu_cal_object);
+	Py_DECREF(mu_cal_object);
+
+	float * spacing = pyarray_as<float>(spacing_array);
+	float * origin = pyarray_as<float>(origin_array);
+	float * iso = pyarray_as<float>(iso_array);
+	double voxel_sp = (double)spacing[0];
+
+	size_t n_mlc_pairs = PyArray_DIM(mlc_array, 0);
 
 	try {
+
+		float adjusted_ga = fmodf(ga + 180.0f, 360.0f);
 
 		size_t dims[3] = {
 			(size_t)PyArray_DIMS(density_array)[0],
 			(size_t)PyArray_DIMS(density_array)[1],
 			(size_t)PyArray_DIMS(density_array)[2],
+		};
+
+		float adjusted_isocenter[3] = {
+			iso[0] - origin[0],
+			iso[1] - origin[1],
+			iso[2] - origin[2]
 		};
 
 		IMRTDose dose_obj = IMRTDose(dims, voxel_sp);
@@ -319,12 +432,12 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		dose_obj.DoseArray = DoseArray.get();
 
 		auto model = photon_beam_model();
-		IMRTBeam beam_obj = IMRTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, collimator_angle, &model);
+		IMRTBeam beam_obj = IMRTBeam(adjusted_isocenter, adjusted_ga, ta, ca, &model);
 		HostPointer<MLCPair> MLCPairArray(n_mlc_pairs);
-		make_mlc_array(mlc, MLCPairArray);
+		make_mlc_array(mlc_array, MLCPairArray);
 		beam_obj.n_mlc_pairs = n_mlc_pairs;
-		beam_obj.mu = mu;
 		beam_obj.mlc = MLCPairArray.get();
+		beam_obj.mu = mu;
 
     	photon_dose_cuda(gpu_id, &dose_obj, &beam_obj);
 
