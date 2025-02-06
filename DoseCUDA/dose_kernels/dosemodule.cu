@@ -21,7 +21,7 @@
  * 		Required type constant
  * 	@returns true if the constraint is satisfied, false if not
  */
-static bool proton_array_typecheck(const PyArrayObject *arr, int dim, int type) {
+static bool pyarray_typecheck(const PyArrayObject *arr, int dim, int type) {
 
 	return PyArray_NDIM(arr) == dim && PyArray_TYPE(arr) == type;
 }
@@ -32,6 +32,60 @@ template <class T>
 static T *pyarray_as(PyArrayObject *arr) {
 
 	return reinterpret_cast<T *>(PyArray_DATA(arr));
+}
+
+
+/** @brief Borrow a reference to a NumPy array object contained by a class
+ * 	@param self
+ * 		Class containing the array
+ * 	@param attr
+ * 		Member/field name of the array
+ * 	@param dim
+ * 		Dimensionality/rank of the array
+ * 	@param[out] arr
+ * 		The `PyArrayObject *` will be written here on success. You do not need
+ * 		to `Py_DECREF` this object
+ * 	@returns true on success, false on error. If an error occurs, a Python
+ * 		exception will already have been raised
+ */
+static bool pyobject_getarray(PyObject *self, const char *attr, int dim, PyArrayObject **arr) {
+
+	PyObject *ptr = PyObject_GetAttrString(self, attr);
+	if (!ptr) {
+		return NULL;
+	}
+
+	bool result = false;
+	*arr = reinterpret_cast<PyArrayObject *>(ptr);
+	if (PyArray_Check(ptr) && pyarray_typecheck(*arr, dim, NPY_FLOAT)) {
+		result = true;
+	} else {
+		PyErr_Format(PyExc_ValueError, "'%s' must be %d-dimensional and of type float.", attr, dim);
+	}
+	Py_DECREF(ptr);
+	return result;
+}
+
+
+/** @brief Get a `double` from a Python class
+ * 	@param self
+ * 		Class
+ * 	@param attr
+ * 		Member/field name of the float
+ * 	@param[out] value
+ * 		The result will be written here on success
+ * 	@returns true on success, false on error. If an error occurs, a Python
+ * 		exception will have been raised
+ */
+static bool pyobject_getfloat(PyObject *self, const char *attr, double *value) {
+
+	PyObject *ptr = PyObject_GetAttrString(self, attr);
+	if (!ptr) {
+		return false;
+	}
+	*value = PyFloat_AsDouble(ptr);
+	Py_DECREF(ptr);
+	return *value == -1.0 ? !PyErr_Occurred() : true;
 }
 
 
@@ -60,12 +114,12 @@ static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
 			&gpu_id))
 		return NULL ;
 
-	if (!proton_array_typecheck(density_array, 3, NPY_FLOAT)) {
+	if (!pyarray_typecheck(density_array, 3, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
 		return NULL ;
 	}
 
-	if (!proton_array_typecheck(iso, 1, NPY_FLOAT)) {
+	if (!pyarray_typecheck(iso, 1, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
 		return NULL ;
 	}
@@ -171,17 +225,17 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 			&gpu_id))
 		return NULL ;
 
-	if (!proton_array_typecheck(wet_array, 3, NPY_FLOAT)) {
+	if (!pyarray_typecheck(wet_array, 3, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
 		return NULL ;
 	}
 
-	if (!proton_array_typecheck(isocenter, 1, NPY_FLOAT)) {
+	if (!pyarray_typecheck(isocenter, 1, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
 		return NULL ;
 	}
 
-	if (!proton_array_typecheck(spots, 2, NPY_FLOAT)) {
+	if (!pyarray_typecheck(spots, 2, NPY_FLOAT)) {
 		PyErr_SetString(PyExc_ValueError, "Spot data array must be two-dimensional and of type float.");
 		return NULL ;
 	}
@@ -293,112 +347,33 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
     }
 
 	// check volume data properties
-	PyObject *density_object = PyObject_GetAttrString(volume_instance, "voxel_data");
-    if (!density_object) {
-        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'voxel_data'");
-        return NULL;
-    }
-
-	PyArrayObject *density_array = (PyArrayObject *) density_object;
-	if (!proton_array_typecheck(density_array, 3, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "'voxel_data' must be three-dimensional and of type float.");
-		return NULL ;
-	}
-
-	PyObject *spacing_object = PyObject_GetAttrString(volume_instance, "spacing");
-    if (!spacing_object) {
-        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'spacing'");
-        return NULL;
-    }
-	
-	PyArrayObject *spacing_array = (PyArrayObject *) spacing_object;
-	if (!proton_array_typecheck(spacing_array, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "'spacing' must be one-dimensional and of type float.");
-		return NULL ;
-	}
-
-	PyObject *origin_object = PyObject_GetAttrString(volume_instance, "origin");
-    if (!origin_object) {
-        PyErr_SetString(PyExc_AttributeError, "VolumeObject instance has no attribute 'origin'");
-        return NULL;
-    }
-
-	PyArrayObject *origin_array = (PyArrayObject *) origin_object;
-	if (!proton_array_typecheck(origin_array, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "'origin' must be one-dimensional and of type float.");
-		return NULL ;
+	PyArrayObject *density_array, *spacing_array, *origin_array;
+	if (!pyobject_getarray(volume_instance, "voxel_data", 3, &density_array)
+	 || !pyobject_getarray(volume_instance, "spacing", 1, &spacing_array)
+	 || !pyobject_getarray(volume_instance, "origin", 1, &origin_array)) {
+		return NULL;
 	}
 
 	// check control point data properties
-	PyObject *iso_object = PyObject_GetAttrString(cp_instance, "iso");
-    if (!iso_object) {
-        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'iso'");
-        return NULL;
-    }
-
-	PyArrayObject *iso_array = (PyArrayObject *) iso_object;
-	if (!proton_array_typecheck(iso_array, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "'iso' must be one-dimensional and of type float.");
-		return NULL ;
-	}
-
-	PyObject *mlc_object = PyObject_GetAttrString(cp_instance, "mlc");
-    if (!mlc_object) {
-        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'mlc'");
-        return NULL;
-    }
-
-	PyArrayObject *mlc_array = (PyArrayObject *) mlc_object;
-	if (!proton_array_typecheck(mlc_array, 2, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "'mlc' must be two-dimensional and of type float.");
-		return NULL ;
-	}
-
-	PyObject *mu_object = PyObject_GetAttrString(cp_instance, "mu");
-    if (!mu_object) {
-        PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'mu'");
-        return NULL;
-    }
-
-	double mu = PyFloat_AsDouble(mu_object);
-	Py_DECREF(mu_object);
-
-	PyObject *gantry_object = PyObject_GetAttrString(cp_instance, "ga");
-	if (!gantry_object) {
-		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ga'");
+	PyArrayObject *iso_array, *mlc_array;
+	if (!pyobject_getarray(cp_instance, "iso", 1, &iso_array)
+	 || !pyobject_getarray(cp_instance, "mlc", 2, &mlc_array)) {
 		return NULL;
 	}
 
-	double ga = PyFloat_AsDouble(gantry_object);
-	Py_DECREF(gantry_object);
-
-	PyObject *collimator_object = PyObject_GetAttrString(cp_instance, "ca");
-	if (!collimator_object) {
-		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ca'");
+	double mu, ga, ca, ta;
+	if (!pyobject_getfloat(cp_instance, "mu", &mu)
+	 || !pyobject_getfloat(cp_instance, "ga", &ga)
+	 || !pyobject_getfloat(cp_instance, "ca", &ca)
+	 || !pyobject_getfloat(cp_instance, "ta", &ta)) {
 		return NULL;
 	}
-
-	double ca = PyFloat_AsDouble(collimator_object);
-	Py_DECREF(collimator_object);
-
-	PyObject *couch_object = PyObject_GetAttrString(cp_instance, "ta");
-	if (!couch_object) {
-		PyErr_SetString(PyExc_AttributeError, "IMRTControlPoint instance has no attribute 'ta'");
-		return NULL;
-	}
-
-	double ta = PyFloat_AsDouble(couch_object);
-	Py_DECREF(couch_object);
 
 	// beam model 
-	PyObject *mu_cal_object = PyObject_GetAttrString(model_instance, "mu_calibration");
-	if (!mu_cal_object) {
-		PyErr_SetString(PyExc_AttributeError, "IMRTBeamModel instance has no attribute 'mu_calibration'");
+	double mu_cal;
+	if (!pyobject_getfloat(model_instance, "mu_calibration", &mu_cal)) {
 		return NULL;
 	}
-
-	double mu_cal = PyFloat_AsDouble(mu_cal_object);
-	Py_DECREF(mu_cal_object);
 
 	float * spacing = pyarray_as<float>(spacing_array);
 	float * origin = pyarray_as<float>(origin_array);
