@@ -104,7 +104,11 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    ```cmd
    python tests/test_phantom_impt.py
    ```
-
+   or
+   ```
+   python tests/test_phantom_imrt.py
+   ```
+   
    If everything is installed correctly, the dose calculation output should appear in the terminal, with files saved into `./test_phantom_output`.
 
 9. **Deactivate the virtual environment** (if used):
