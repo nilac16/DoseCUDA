@@ -2,7 +2,7 @@
 
 **NOT FOR CLINICAL USE**
 
-**DoseCUDA** is a Python package enabling GPU-based radiation dose calculation for research, development, and education. The package currently supports proton dose calculation using a double-Gaussian pencil beam algorithm. The default beam model corresponds to a Hitachi Probeat synchrotron-based PBS delivery system with 98 discrete energies.
+**DoseCUDA** is a Python package enabling GPU-based radiation dose calculation for research, development, and education. The package currently supports photon dose calculation using a collapsed cone convolution superposition algorithm and proton dose calculation using a double-Gaussian pencil beam algorithm. The default photon beam model corresponds to the 6 MV energy of a Varian Truebeam linear accelerator and the default proton beam model corresponds to a Hitachi Probeat synchrotron-based PBS delivery system with 98 discrete energies.
 
 # Quickstart Guide
 
@@ -31,7 +31,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
 
 3. **Clone the DoseCUDA repository**:
    ```
-   git clone git@github.com:tomhrinivich/DoseCUDA.git
+   git clone https://github.com/jhu-som-radiation-oncology/DoseCUDA
    cd DoseCUDA
    ```
 
@@ -44,6 +44,10 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    Run the test script to verify that DoseCUDA is installed correctly and working:
    ```
    python tests/test_phantom_impt.py
+   ```
+   or
+   ```
+   python tests/test_phantom_imrt.py
    ```
 
    If everything is installed correctly, you should see the dose calculation output in your terminal and files saved into `./test_phantom_output`.
@@ -86,7 +90,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
 
 6. **Clone the DoseCUDA repository**:
    ```cmd
-   git clone git@github.com:tomhrinivich/DoseCUDA.git
+   git clone https://github.com/jhu-som-radiation-oncology/DoseCUDA
    cd DoseCUDA
    ```
 

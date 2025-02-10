@@ -474,8 +474,6 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		HostPointer<MLCPair> MLCPairArray(n_mlc_pairs);
 		make_mlc_array(mlc_array, MLCPairArray);
 
-		printf("ca: %f\n", ca);
-
 		// beam object
 		IMRTBeam beam_obj = IMRTBeam(adjusted_isocenter, adjusted_ga, ta, ca, &model);
 		beam_obj.n_mlc_pairs = n_mlc_pairs;

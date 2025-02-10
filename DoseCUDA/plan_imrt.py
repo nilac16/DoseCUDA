@@ -185,8 +185,6 @@ class IMRTBeamModel:
         if self.mlc_transmission is None:
             raise Exception("mlc_transmission not found in machine_parameters.csv")
         
-
-
     def outputFactor(self, cp):
     
         min_y = 10000.0
@@ -380,3 +378,32 @@ class IMRTPlan(Plan):
                         cumulative_mu = cp.CumulativeMetersetWeight
                 
                 self.addBeam(imrt_beam)
+
+    def addSquareField(self, dimx=10, dimy=10, mu=100, gantry_angle=0.0, collimator_angle=0.0, table_angle=0.0):
+
+        imrt_beam = IMRTBeam()
+        iso = np.array([0.0, 0.0, 0.0], dtype=np.single)
+
+        dimx *= 10.0 # convert to mm
+        dimy *= 10.0 # convert to mm
+
+        # create a square field
+        mlc = np.zeros((2, self.beam_model.n_mlc_pairs), dtype=np.single)
+        mlc[0, :] = -dimx / 2.0
+        mlc[1, :] = dimx / 2.0
+
+        for i in range(self.beam_model.n_mlc_pairs):
+            if(self.beam_model.mlc_offsets[i] < -(dimy / 2.0)) or (self.beam_model.mlc_offsets[i] > (dimy / 2.0)):
+                mlc[0, i] = 0.0
+                mlc[1, i] = 0.0
+
+        mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
+        mlc = np.transpose(mlc)
+
+        jawx = np.array([-dimx / 2.0, dimx / 2.0], dtype=np.single)
+        jawy = np.array([-dimy / 2.0, dimy / 2.0], dtype=np.single)
+
+
+        cp = IMRTControlPoint(iso, mu, mlc, gantry_angle, collimator_angle, table_angle, jawx, jawy)
+        imrt_beam.addControlPoint(cp)
+        self.addBeam(imrt_beam)

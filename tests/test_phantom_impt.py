@@ -30,7 +30,7 @@ plan.addBeam(beam)
 dose.computeIMPTPlan(plan)
 
 # write the dose to a file
-dose.writeDoseNRRD("test_phantom_output/cube_phantom_dose.nrrd", individual_beams=False, dose_type="PHYSICAL")
+dose.writeDoseNRRD("test_phantom_output/cube_impt_dose.nrrd", individual_beams=False, dose_type="PHYSICAL")
 
 # write the CT to a file
 dose.writeCTNRRD("test_phantom_output/cube_phantom_ct.nrrd")
