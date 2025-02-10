@@ -9,7 +9,10 @@
 #include "IMRTClasses.cuh"
 #include "IMPTClasses.cuh"
 #include "MemoryClasses.h"
-#include "model_params.h"
+
+// to be replaced by proton machine model import
+#define VSADX 1340.0f // mm from iso
+#define VSADY 1930.0f // mm from iso
 
 
 /** @brief Check a NumPy array for dimensionality and contained element type
@@ -86,6 +89,18 @@ static bool pyobject_getfloat(PyObject *self, const char *attr, double *value) {
 	*value = PyFloat_AsDouble(ptr);
 	Py_DECREF(ptr);
 	return *value == -1.0 ? !PyErr_Occurred() : true;
+}
+
+
+static bool pyobject_getbool(PyObject *self, const char *attr, bool *value) {
+
+	PyObject *ptr = PyObject_GetAttrString(self, attr);
+	if (!ptr) {
+		return false;
+	}
+	*value = PyObject_IsTrue(ptr);
+	Py_DECREF(ptr);
+	return true;
 }
 
 
@@ -304,21 +319,6 @@ static PyObject* proton_spot(PyObject *self, PyObject *args) {
 }
 
 
-static IMRTBeam::Model photon_beam_model(void/* PyObject * model */) {
-
-	IMRTBeam::Model model;
-
-	model.air_density				= AIR_DENSITY;
-	model.mu_cal					= MU_CAL;
-	model.primary_src_dist			= PRIMARY_SOURCE_DISTANCE;
-	model.scatter_src_dist			= SCATTER_SOURCE_DISTANCE;
-	model.mlc_distance				= MLC_DISTANCE;
-	model.scatter_src_weight		= SCATTER_SOURCE_WEIGHT;
-	model.electron_mass_attenuation	= ELECTRON_MASS_ATTENUATION;
-	return model;
-}
-
-
 static PyObject * photon_dose(PyObject* self, PyObject* args) {
 
 	PyObject *model_instance, *volume_instance, *cp_instance;
@@ -328,26 +328,63 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "OOOi", &model_instance, &volume_instance, &cp_instance, &gpu_id))
         return NULL;
 
-	PyObject *model_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan_imrt"), "IMRTBeamModel");
-    if (!model_class || !PyObject_IsInstance(model_instance, model_class)) {
-        PyErr_SetString(PyExc_TypeError, "Argument 1 must be an instance of IMRTBeamModel");
-        return NULL;
-    }
+	// check beam model properties 
+	double mu_cal, 
+		primary_source_distance, 
+		scatter_source_distance, 
+		primary_source_size, 
+		scatter_source_size, 
+		mlc_distance, 
+		scatter_source_weight, 
+		electron_attenuation, 
+		electron_src_weight,
+		electron_fitted_dmax,
+		jaw_transmission,
+		mlc_transmission;
 
-	PyObject *volume_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan"), "VolumeObject");
-    if (!volume_class || !PyObject_IsInstance(volume_instance, volume_class)) {
-        PyErr_SetString(PyExc_TypeError, "Argument 2 must be an instance of VolumeObject");
-        return NULL;
-    }
+	if (!pyobject_getfloat(model_instance, "mu_calibration", &mu_cal)
+	 || !pyobject_getfloat(model_instance, "primary_source_distance", &primary_source_distance)
+	 || !pyobject_getfloat(model_instance, "scatter_source_distance", &scatter_source_distance)
+	 || !pyobject_getfloat(model_instance, "primary_source_size", &primary_source_size)
+	 || !pyobject_getfloat(model_instance, "scatter_source_size", &scatter_source_size)
+	 || !pyobject_getfloat(model_instance, "mlc_distance", &mlc_distance)
+	 || !pyobject_getfloat(model_instance, "scatter_source_weight", &scatter_source_weight)
+	 || !pyobject_getfloat(model_instance, "electron_attenuation", &electron_attenuation)
+	 || !pyobject_getfloat(model_instance, "electron_source_weight", &electron_src_weight)
+	 || !pyobject_getfloat(model_instance, "electron_fitted_dmax", &electron_fitted_dmax)
+	 || !pyobject_getfloat(model_instance, "jaw_transmission", &jaw_transmission)
+	 || !pyobject_getfloat(model_instance, "mlc_transmission", &mlc_transmission)) {
+		return NULL;
+	}
 
-	PyObject *cp_class = PyObject_GetAttrString(PyImport_ImportModule("DoseCUDA.plan_imrt"), "IMRTControlPoint");
-    if (!cp_class || !PyObject_IsInstance(cp_instance, cp_class)) {
-        PyErr_SetString(PyExc_TypeError, "Argument 3 must be an instance of IMRTControlPoint");
-        return NULL;
-    }
+	bool has_xjaws, 
+		has_yjaws;
+	if (!pyobject_getbool(model_instance, "has_xjaws", &has_xjaws)
+	 || !pyobject_getbool(model_instance, "has_yjaws", &has_yjaws)) {
+		return NULL;
+	}
+
+	PyArrayObject *profile_radius, 
+		*profile_intensities, 
+		*profile_softening, 
+		*spectrum_attenuation_coefficients, 
+		*spectrum_primary_weights, 
+		*spectrum_scatter_weights, 
+		*kernel;
+	if (!pyobject_getarray(model_instance, "profile_radius", 1, &profile_radius)
+	 || !pyobject_getarray(model_instance, "profile_intensities", 1, &profile_intensities)
+	 || !pyobject_getarray(model_instance, "profile_softening", 1, &profile_softening)
+	 || !pyobject_getarray(model_instance, "spectrum_attenuation_coefficients", 1, &spectrum_attenuation_coefficients)
+	 || !pyobject_getarray(model_instance, "spectrum_primary_weights", 1, &spectrum_primary_weights)
+	 || !pyobject_getarray(model_instance, "spectrum_scatter_weights", 1, &spectrum_scatter_weights)
+	 || !pyobject_getarray(model_instance, "kernel", 2, &kernel)) {
+		return NULL;
+	}
 
 	// check volume data properties
-	PyArrayObject *density_array, *spacing_array, *origin_array;
+	PyArrayObject *density_array, 
+		*spacing_array, 
+		*origin_array;
 	if (!pyobject_getarray(volume_instance, "voxel_data", 3, &density_array)
 	 || !pyobject_getarray(volume_instance, "spacing", 1, &spacing_array)
 	 || !pyobject_getarray(volume_instance, "origin", 1, &origin_array)) {
@@ -355,13 +392,17 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 	}
 
 	// check control point data properties
-	PyArrayObject *iso_array, *mlc_array;
+	PyArrayObject *iso_array, 
+		*mlc_array;
 	if (!pyobject_getarray(cp_instance, "iso", 1, &iso_array)
 	 || !pyobject_getarray(cp_instance, "mlc", 2, &mlc_array)) {
 		return NULL;
 	}
 
-	double mu, ga, ca, ta;
+	double mu, 
+		ga, 
+		ca, 
+		ta;
 	if (!pyobject_getfloat(cp_instance, "mu", &mu)
 	 || !pyobject_getfloat(cp_instance, "ga", &ga)
 	 || !pyobject_getfloat(cp_instance, "ca", &ca)
@@ -369,11 +410,7 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		return NULL;
 	}
 
-	// beam model 
-	double mu_cal;
-	if (!pyobject_getfloat(model_instance, "mu_calibration", &mu_cal)) {
-		return NULL;
-	}
+
 
 	float * spacing = pyarray_as<float>(spacing_array);
 	float * origin = pyarray_as<float>(origin_array);
@@ -398,6 +435,33 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 			iso[2] - origin[2]
 		};
 
+		// beam model object
+		auto model = IMRTBeam::Model();
+		model.n_profile_points = PyArray_DIM(profile_radius, 0);
+		model.profile_radius = pyarray_as<float>(profile_radius);
+		model.profile_intensities = pyarray_as<float>(profile_intensities);
+		model.profile_softening = pyarray_as<float>(profile_softening);
+		model.n_spectral_energies = PyArray_DIM(spectrum_attenuation_coefficients, 0);
+		model.spectrum_attenuation_coefficients = pyarray_as<float>(spectrum_attenuation_coefficients);
+		model.spectrum_primary_weights = pyarray_as<float>(spectrum_primary_weights);
+		model.spectrum_scatter_weights = pyarray_as<float>(spectrum_scatter_weights);
+		model.mu_cal = mu_cal;
+		model.primary_src_dist = primary_source_distance;
+		model.scatter_src_dist = scatter_source_distance;
+		model.primary_src_size = primary_source_size;
+		model.scatter_src_size = scatter_source_size;
+		model.mlc_distance = mlc_distance;
+		model.scatter_src_weight = scatter_source_weight;
+		model.electron_attenuation = electron_attenuation;
+		model.electron_src_weight = electron_src_weight;
+		model.kernel = pyarray_as<float>(kernel);
+		model.has_xjaws = has_xjaws;
+		model.has_yjaws = has_yjaws;
+		model.electron_fitted_dmax = electron_fitted_dmax;
+		model.jaw_transmission = jaw_transmission;
+		model.mlc_transmission = mlc_transmission;
+
+		// dose object
 		IMRTDose dose_obj = IMRTDose(dims, voxel_sp);
 		HostPointer<float> WETArray(dose_obj.num_voxels);
 		HostPointer<float> DoseArray(dose_obj.num_voxels);
@@ -406,14 +470,19 @@ static PyObject * photon_dose(PyObject* self, PyObject* args) {
 		dose_obj.WETArray = WETArray.get();
 		dose_obj.DoseArray = DoseArray.get();
 
-		auto model = photon_beam_model();
-		IMRTBeam beam_obj = IMRTBeam(adjusted_isocenter, adjusted_ga, ta, ca, &model);
+		// MLC object_array
 		HostPointer<MLCPair> MLCPairArray(n_mlc_pairs);
 		make_mlc_array(mlc_array, MLCPairArray);
+
+		printf("ca: %f\n", ca);
+
+		// beam object
+		IMRTBeam beam_obj = IMRTBeam(adjusted_isocenter, adjusted_ga, ta, ca, &model);
 		beam_obj.n_mlc_pairs = n_mlc_pairs;
 		beam_obj.mlc = MLCPairArray.get();
 		beam_obj.mu = mu;
 
+		// compute dose
     	photon_dose_cuda(gpu_id, &dose_obj, &beam_obj);
 
 		PyObject *return_dose = PyArray_SimpleNewFromData(3, PyArray_DIMS(density_array), PyArray_TYPE(density_array), DoseArray.release());

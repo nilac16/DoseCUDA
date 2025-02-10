@@ -13,4 +13,10 @@ primary_source_size, 1.0
 scatter_source_size, 30.0
 mlc_distance, 491.0
 scatter_source_weight, 0.16
-electron_mass_attenuation_coefficient, 1.0
+electron_attenuation, 1.0
+electron_source_weight, 2.0
+electron_fitted_dmax, 1.5
+jaw_transmission, 0.01
+mlc_transmission, 0.02
+has_xjaws, 1
+has_yjaws, 1

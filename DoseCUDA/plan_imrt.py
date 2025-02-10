@@ -19,15 +19,11 @@ class IMRTBeamModel:
         self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
         self.mlc_widths = mlc_geometry["width"].to_numpy()
         self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
-        self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
         self.n_mlc_pairs = len(self.mlc_index)
 
         kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "kernel.csv"))
         kernel = pd.read_csv(kernel_path)
-        self.kernel = kernel.to_numpy()
-
-        print(self.kernel.shape)
-        print(self.kernel)
+        self.kernel = np.array(kernel.to_numpy(), dtype=np.single)
 
         machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_parameters.csv"))
 
@@ -38,7 +34,7 @@ class IMRTBeamModel:
         self.scatter_source_distance = None
         self.mlc_distance = None
         self.scatter_source_weight = None
-        self.electron_mass_attenuation_coefficient = None
+        self.electron_attenuation = None
         self.primary_source_size = None
         self.scatter_source_size = None
         self.profile_radius = None
@@ -47,6 +43,12 @@ class IMRTBeamModel:
         self.spectrum_attenuation_coefficients = None
         self.spectrum_primary_weights = None
         self.spectrum_scatter_weights = None
+        self.electron_source_weight = None
+        self.has_xjaws = None
+        self.has_yjaws = None
+        self.electron_fitted_dmax = None
+        self.jaw_transmission = None
+        self.mlc_transmission = None
 
         for line in open(machine_parameters_path):
 
@@ -71,8 +73,8 @@ class IMRTBeamModel:
             if line.startswith('scatter_source_weight'):
                 self.scatter_source_weight = float(line.split(',')[1])
 
-            if line.startswith('electron_mass_attenuation_coefficient'):
-                self.electron_mass_attenuation_coefficient = float(line.split(',')[1])
+            if line.startswith('electron_attenuation'):
+                self.electron_attenuation = float(line.split(',')[1])
 
             if line.startswith('primary_source_size'):
                 self.primary_source_size = float(line.split(',')[1])
@@ -97,6 +99,24 @@ class IMRTBeamModel:
 
             if line.startswith('spectrum_scatter_weights'):
                 self.spectrum_scatter_weights = np.array(line.split(',')[1:], dtype=np.single)
+            
+            if line.startswith('electron_source_weight'):
+                self.electron_source_weight = float(line.split(',')[1])
+
+            if line.startswith('has_xjaws'):
+                self.has_xjaws = bool(line.split(',')[1])
+
+            if line.startswith('has_yjaws'):
+                self.has_yjaws = bool(line.split(',')[1])
+
+            if line.startswith('electron_fitted_dmax'):
+                self.electron_fitted_dmax = float(line.split(',')[1])
+
+            if line.startswith('jaw_transmission'):
+                self.jaw_transmission = float(line.split(',')[1])
+
+            if line.startswith('mlc_transmission'):
+                self.mlc_transmission = float(line.split(',')[1])
 
 
         if self.output_factor_equivalent_squares is None:
@@ -120,7 +140,7 @@ class IMRTBeamModel:
         if self.scatter_source_weight is None:
             raise Exception("scatter_source_weight not found in machine_parameters.csv")
         
-        if self.electron_mass_attenuation_coefficient is None:
+        if self.electron_attenuation is None:
             raise Exception("electron_mass_attenuation_coefficient not found in machine_parameters.csv")
         
         if self.primary_source_size is None:
@@ -146,6 +166,25 @@ class IMRTBeamModel:
         
         if self.spectrum_scatter_weights is None:
             raise Exception("spectrum_scatter_weights not found in machine_parameters.csv")
+        
+        if self.electron_source_weight is None:
+            raise Exception("electron_source_weight not found in machine_parameters.csv")
+        
+        if self.has_xjaws is None:
+            raise Exception("has_xjaws not found in machine_parameters.csv")
+        
+        if self.has_yjaws is None:
+            raise Exception("has_yjaws not found in machine_parameters.csv")
+        
+        if self.electron_fitted_dmax is None:
+            raise Exception("electron_fitted_dmax not found in machine_parameters.csv")
+        
+        if self.jaw_transmission is None:
+            raise Exception("jaw_transmission not found in machine_parameters.csv")
+        
+        if self.mlc_transmission is None:
+            raise Exception("mlc_transmission not found in machine_parameters.csv")
+        
 
 
     def outputFactor(self, cp):
@@ -261,23 +300,6 @@ class IMRTPlan(Plan):
 
         self.machine_name = machine_name
         self.beam_model = IMRTBeamModel(os.path.join("lookuptables", "photons", machine_name))
-
-        # mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "mlc_geometry.csv"))
-        # mlc_geometry = pd.read_csv(mlc_geometry_path)
-
-        # self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
-        # self.mlc_widths = mlc_geometry["width"].to_numpy()
-        # self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
-        # self.mlc_thickness = mlc_geometry["thickness"].to_numpy()
-        # self.mlc_distance_to_source = mlc_geometry["distance_to_source"].to_numpy()
-        # self.n_mlc_pairs = len(self.mlc_index)
-
-        # machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "machine_parameters.csv"))
-        # for line in open(machine_parameters_path):
-        #     if line.startswith('output_factor_equivalent_squares'):
-        #         self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
-        #     if line.startswith('output_factor_values'):
-        #         self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
 
     def readPlanDicom(self, plan_path):
 

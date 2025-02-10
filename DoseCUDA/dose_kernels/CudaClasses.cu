@@ -26,7 +26,6 @@ __host__ CudaBeam::CudaBeam(float * iso, float gantry_angle, float couch_angle, 
 	//machine angles in radians
 	float ga = gantry_angle * M_PI / 180.0f;
 	float ta = couch_angle * M_PI / 180.0f;
-	float ca = 0.0f;
 	this->singa = sinf(ga);
 	this->cosga = cosf(ga);
 	this->sinta = sinf(ta);
@@ -211,9 +210,7 @@ __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D Densi
 	beam->unitVectorToSource(&vox_xyz, &uvec);
 
 	PointXYZ vox_ray_xyz, tex_xyz;
-	PointIJK vox_ray_ijk;
 
-	int vox_ray_index = 0;
     float ray_length = 0.0;
     float wet_sum = -0.05;
     float density = 0.0;

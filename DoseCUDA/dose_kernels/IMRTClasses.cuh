@@ -3,6 +3,8 @@
 
 #include "CudaClasses.cuh"
 
+#define AIR_DENSITY 0.0012f // g/cc
+
 typedef struct {
 
     float x1;
@@ -20,16 +22,37 @@ class IMRTBeam : public CudaBeam{
 
         struct Model {
 
-            float air_density;  // g/cc
-            float mu_cal;       // calibration factor
+            size_t n_profile_points;
+            float * profile_radius;
+            float * profile_intensities;
+            float * profile_softening;
 
-            float primary_src_dist; // mm from iso
-            float scatter_src_dist; // mm from iso
+            size_t n_spectral_energies;
+            float * spectrum_attenuation_coefficients;
+            float * spectrum_primary_weights;
+            float * spectrum_scatter_weights;
 
-            float mlc_distance;     // mm from iso
+            float mu_cal;
+
+            float primary_src_dist;
+            float scatter_src_dist;
+
+            float primary_src_size;
+            float scatter_src_size;
+
+            float mlc_distance;
 
             float scatter_src_weight;
-            float electron_mass_attenuation;    // empirical factor - electron depth dose modeled as exponential
+            float electron_attenuation;
+            float electron_src_weight;
+            float electron_fitted_dmax;
+            float jaw_transmission;
+            float mlc_transmission;
+
+            bool has_xjaws;
+            bool has_yjaws;
+
+            float * kernel;
 
         } model;
 
@@ -41,15 +64,10 @@ class IMRTBeam : public CudaBeam{
 		MLCPair * mlc;  // MLC leaf pairs
         int n_mlc_pairs;    // Number of leaf pairs
 
-		float * off_axis_radii;
-        float * off_axis_factors;
-        float * off_axis_softening;
-        int off_axis_len;
-
         __host__ IMRTBeam(IMRTBeam * h_beam);
 		__host__ IMRTBeam(float * iso, float gantry_angle, float couch_angle, float collimator_angle, const Model * model);
 
-        __device__ float headTransmission(const PointXYZ * point_xyz, const float distance_to_source, const float xSigma, const float ySigma);
+        __device__ float headTransmission(const PointXYZ* point_xyz, const float iso_to_source, const float source_sigma);
 
 		__device__ void offAxisFactors(const PointXYZ * point_xyz, float * off_axis_factor, float * off_axis_softening);
 
