@@ -55,7 +55,7 @@ static bool pyobject_getarray(PyObject *self, const char *attr, int dim, PyArray
 
 	PyObject *ptr = PyObject_GetAttrString(self, attr);
 	if (!ptr) {
-		return NULL;
+		return false;
 	}
 
 	bool result = false;
@@ -98,9 +98,10 @@ static bool pyobject_getbool(PyObject *self, const char *attr, bool *value) {
 	if (!ptr) {
 		return false;
 	}
-	*value = PyObject_IsTrue(ptr);
+	int result = PyObject_IsTrue(ptr);
 	Py_DECREF(ptr);
-	return true;
+	*value = result > 0;
+	return result >= 0;
 }
 
 
