@@ -6,16 +6,16 @@ import pydicom as pyd
 class VolumeObject:
 
     def __init__(self):
-        self.origin = np.array([0.0, 0.0, 0.0])
-        self.spacing = np.array([0.0, 0.0, 0.0])
+        self.origin = np.array([0.0, 0.0, 0.0], dtype=np.single)
+        self.spacing = np.array([0.0, 0.0, 0.0], dtype=np.single)
         self.voxel_data = []
 
 
 class DoseGrid:
 
     def __init__(self):
-        self.origin = np.array([0.0, 0.0, 0.0])
-        self.spacing = np.array([0.0, 0.0, 0.0])
+        self.origin = np.array([0.0, 0.0, 0.0], dtype=np.single)
+        self.spacing = np.array([0.0, 0.0, 0.0], dtype=np.single)
         self.size = np.array([0, 0, 0])
         self.HU = []
         self.dose = []
