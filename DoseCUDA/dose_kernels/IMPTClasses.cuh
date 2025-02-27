@@ -33,7 +33,7 @@ class IMPTBeam : public CudaBeam{
             float vsadx;
             float vsady;
 
-            float sourceDistance() const { return fmaxf(this->vsadx, this->vsady); }
+            float sourceDistance() const { return (this->vsadx + this->vsady) / 2.0f; }
         } model;    // Beam model parameters
 
         int n_energies; // Total energies
