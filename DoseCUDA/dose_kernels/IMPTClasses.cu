@@ -126,46 +126,16 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 
 }
 
-/** @brief Compute the squared minimum distance between a line and an arbitrary
- * 		point
- * 	@param l0
- * 		"Starting" point on the line
- * 	@param l1
- * 		"Ending" point of the line segment
- * 	@param p
- * 		Test point, from which the nearest distance to the infinite line defined
- * 		by @p l0 and @p l1 will be computed
- * 	@returns The nearest distance squared, or `NaN` if @p l0 and @p l1 are the
- * 		same coordinates
- */
-__device__ float line_nearest(const PointXYZ &l0, const PointXYZ &l1, const PointXYZ &p)
-{
-	PointXYZ alpha = {
-		l0.x - p.x,
-		l0.y - p.y,
-		l0.z - p.z
-	}, beta = {
-		l1.x - l0.x,
-		l1.y - l0.y,
-		l1.z - l0.z
-	};
-	auto alphasqr = xyz_dotproduct(alpha, alpha);
-	auto betasqr = xyz_dotproduct(beta, beta);
-	auto dp = xyz_dotproduct(alpha, beta);
-
-	return alphasqr - dp * dp / betasqr;
-}
-
 __device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
 {
-	PointXYZ emerge = {
-		fmaxf(model.vsadx - model.vsady, 0.0f) * spot.x / model.vsadx,
-		fmaxf(model.vsady - model.vsadx, 0.0f) * spot.y / model.vsady,
-		fminf(model.vsadx, model.vsady)
-	};
-	PointXYZ spotloc = { spot.x, spot.y, 0 };
+	PointXYZ tangent = { spot.x / model.vsadx, spot.y / model.vsady, -1.0 };
+	PointXYZ ray = { vox.x - spot.x, vox.y - spot.y, vox.z };
 
-	return line_nearest(emerge, spotloc, vox);
+	const auto tansqr = xyz_dotproduct(tangent, tangent);
+	const auto raysqr = xyz_dotproduct(ray, ray);
+	const auto dotprd = xyz_dotproduct(tangent, ray);
+
+	return raysqr - dotprd * dotprd / tansqr;
 }
 
 
