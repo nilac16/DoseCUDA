@@ -33,7 +33,7 @@ __host__ IMRTBeam::IMRTBeam(float * iso, float gantry_angle, float couch_angle, 
 	this->model = *model;
 	this->collimator_angle = collimator_angle;
 
-	float ca = collimator_angle * M_PI / 180.0f;
+	float ca = collimator_angle * CUDART_PI_F / 180.0f;
 	this->sinca = sin(ca);
 	this->cosca = cos(ca);
 }
@@ -256,7 +256,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 		// float bm = g_kernel[4][i];
 		// float ray_length_init = g_kernel[5][i];
 
-		float th = beam->model.kernel[i] * M_PI / 180.0;
+		float th = beam->model.kernel[i] * CUDART_PI_F / 180.0;
 		float Am = beam->model.kernel[i + 6];
 		float am = beam->model.kernel[i + 12];
 		float Bm = beam->model.kernel[i + 18];
@@ -265,7 +265,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 		for(int j = 0; j < 12; j++){
 
-			float phi = (float)j * 30.0 * M_PI / 180.0;
+			float phi = (float)j * 30.0 * CUDART_PI_F / 180.0;
 			float xr = sinf(th) * cosf(phi);
 			float yr = sinf(th) * sinf(phi);
 			float zr = cosf(th);

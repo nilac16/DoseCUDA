@@ -24,8 +24,8 @@ __host__ CudaBeam::CudaBeam(float * iso, float gantry_angle, float couch_angle, 
 
 	//starting coordinate is [x, y, z] = [0.0, SAD, 0.0]
 	//machine angles in radians
-	float ga = gantry_angle * M_PI / 180.0f;
-	float ta = couch_angle * M_PI / 180.0f;
+	float ga = gantry_angle * CUDART_PI_F / 180.0f;
+	float ta = couch_angle * CUDART_PI_F / 180.0f;
 	this->singa = sinf(ga);
 	this->cosga = cosf(ga);
 	this->sinta = sinf(ta);
