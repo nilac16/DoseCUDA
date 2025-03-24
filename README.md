@@ -2,6 +2,12 @@
 
 **NOT FOR CLINICAL USE**
 
+**License**
+This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+
+**Reference**
+Bhattacharya M, Reamy C, Li H, Lee J, Hrinivich WT. "A Python package for fast GPU-based proton pencil beam dose calculation." The Journal of Applied Clinical Medical Physics. (In Press) 2025
+
 **DoseCUDA** is a Python package enabling GPU-based radiation dose calculation for research, development, and education. The package currently supports photon dose calculation using a collapsed cone convolution superposition algorithm and proton dose calculation using a double-Gaussian pencil beam algorithm. The default photon beam model corresponds to the 6 MV energy of a Varian Truebeam linear accelerator and the default proton beam model corresponds to a Hitachi Probeat synchrotron-based PBS delivery system with 98 discrete energies.
 
 # Quickstart Guide
