@@ -108,11 +108,11 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
 8. **Verify the installation**:
    Run the test script to verify that DoseCUDA is installed correctly and working:
    ```cmd
-   python tests/test_phantom_impt.py
+   python tests\test_phantom_impt.py
    ```
    or
    ```
-   python tests/test_phantom_imrt.py
+   python tests\test_phantom_imrt.py
    ```
    
    If everything is installed correctly, the dose calculation output should appear in the terminal, with files saved into `./test_phantom_output`.
