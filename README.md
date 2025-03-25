@@ -15,13 +15,15 @@ Bhattacharya M, Reamy C, Li H, Lee J, Hrinivich WT. "A Python package for fast G
 ## Prerequisites
 Before installing DoseCUDA, ensure you have the following dependencies installed:
 - **Python 3.6+**
-- **CMake 3.10+**
+- **CMake 3.15+**
 - **CUDA Toolkit** (Ensure you have a compatible version for your GPU)
 - **Git** (for cloning the repository)
 
 Ensure that your GPU and CUDA drivers are properly set up before proceeding.
 
 ## Installation on Linux
+
+Linux builds were tested on Ubuntu 20.04.4 LTS and Debian 12.
 
 1. **Install Python** (if not already installed):
    ```
@@ -45,6 +47,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    ```
    python -m pip install .
    ```
+   You may have to [override the host compiler](#additional-notes-linux) if yours is not supported.
 
 5. **Verify the installation**:
    Run the test script to verify that DoseCUDA is installed correctly and working:
@@ -58,10 +61,6 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
 
    If everything is installed correctly, you should see the dose calculation output in your terminal and files saved into `./test_phantom_output`.
 
-## Additional Notes:
-- **CUDA version**: Ensure that your CUDA version is compatible with your GPU and the CUDA Toolkit installed on your system.
-- **Virtual environments**: Virtual environments help avoid conflicts between dependencies required by DoseCUDA and other Python projects you may have on your machine.
-
 
 6. **Deactivating the virtual environment** (if used):
    After using the package, you can deactivate the virtual environment:
@@ -69,26 +68,35 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    deactivate
    ```
 
+## Additional Notes (Linux):
+- **CUDA version**: Ensure that your CUDA version is compatible with your GPU and the CUDA Toolkit installed on your system.
+- **Virtual environments**: Virtual environments help avoid conflicts between dependencies required by DoseCUDA and other Python projects you may have on your machine.
+- **NVCC host compiler**: You can supply a host compiler override to pip by setting the environment variable `CUDAHOSTCXX` to the compiler command (e.g. `CUDAHOSTCXX=clang++`). Use this if your system's default is not supported.
+
 ## Installation on Windows
+
+Windows builds have only been tested with Visual Studio 2022 on Windows 11 Enterprise Edition.
 
 1. **Install Python** (if not already installed):
    - Download Python from the [official website](https://www.python.org/downloads/) and install it.
    - Make sure to check the option "Add Python to PATH" during the installation.
 
-2. **Install CMake**:
-   - Download the latest version of CMake from the [official website](https://cmake.org/download/).
-   - During the installation, select the option to "Add CMake to the system PATH for all users".
+2. **Install MSVC**
+   - Download Microsoft's Visual Studio installer from the [official website](https://visualstudio.microsoft.com/downloads/).
+      - Install the x64/x86 build tools (C++ compiler and runtime libraries)
+      - Install the CMake tools
+      - (optional) Install Git for Windows
 
 3. **Install the CUDA Toolkit**:
    - Download and install the appropriate version of the CUDA Toolkit from the [NVIDIA website](https://developer.nvidia.com/cuda-toolkit).
    - Make sure the drivers for your GPU are compatible with this version.
 
-4. **Install Git**:
+4. **Install Git (if not installed through MSVC)**:
    - Download and install Git from the [official website](https://git-scm.com/download/win).
    - During the installation, choose "Git from the command line and also from 3rd-party software".
 
 5. **Create a virtual environment** (optional but recommended):
-   Open the command prompt (cmd) and run:
+   Open a command prompt (cmd) and run:
    ```cmd
    python -m venv dosecuda-env
    dosecuda-env\Scripts\activate
@@ -101,6 +109,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    ```
 
 7. **Install DoseCUDA using pip**:
+   From a [**developer command prompt**](#additional-notes-windows):
    ```cmd
    python -m pip install .
    ```
@@ -114,7 +123,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    ```
    python tests\test_phantom_imrt.py
    ```
-   
+
    If everything is installed correctly, the dose calculation output should appear in the terminal, with files saved into `.\test_phantom_output`.
 
 9. **Deactivate the virtual environment** (if used):
@@ -123,10 +132,10 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    deactivate
    ```
 
-## Additional Notes:
+## Additional Notes (Windows):
 - **PATH configuration**: Ensure Python, CMake, and CUDA are added to your system's PATH during their installations to avoid issues.
 - **CUDA compatibility**: Ensure your GPU is compatible with the version of CUDA Toolkit you installed.
-
+- **Developer command prompt**: Using a [developer command prompt](https://learn.microsoft.com/en-us/visualstudio/ide/reference/command-prompt-powershell) ensures that all MSVC build tools are present in the environment's PATH. Use the `x64 Native Tools Command Prompt` for best results.
 
 # Contact
 
