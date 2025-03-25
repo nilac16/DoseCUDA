@@ -115,7 +115,7 @@ Ensure that your GPU and CUDA drivers are properly set up before proceeding.
    python tests\test_phantom_imrt.py
    ```
    
-   If everything is installed correctly, the dose calculation output should appear in the terminal, with files saved into `./test_phantom_output`.
+   If everything is installed correctly, the dose calculation output should appear in the terminal, with files saved into `.\test_phantom_output`.
 
 9. **Deactivate the virtual environment** (if used):
    After using the package, deactivate the virtual environment by typing:
