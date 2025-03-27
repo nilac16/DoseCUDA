@@ -22,12 +22,12 @@ class IMRTBeam : public CudaBeam{
 
         struct Model {
 
-            size_t n_profile_points;
+            int n_profile_points;
             float * profile_radius;
             float * profile_intensities;
             float * profile_softening;
 
-            size_t n_spectral_energies;
+            int n_spectral_energies;
             float * spectrum_attenuation_coefficients;
             float * spectrum_primary_weights;
             float * spectrum_scatter_weights;

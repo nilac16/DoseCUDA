@@ -13,9 +13,9 @@ class Texture3D {
     bool                m_isCopy;
 
     void makeArray(const PointIJK &size);
-    void makeTexture(cudaTextureFilterMode filterMode);
+    void makeTexture(cudaTextureFilterMode filterMode, float border);
 
-    Texture3D(const float data[], const PointIJK &size, cudaTextureFilterMode filterMode, cudaMemcpyKind direction);
+    Texture3D(const float data[], const PointIJK &size, cudaTextureFilterMode filterMode, float border, cudaMemcpyKind direction);
 
 public:
     Texture3D(const Texture3D &other):
@@ -40,9 +40,9 @@ public:
      *      Desired filtering mode for sampling from this texture
      *  @returns A new 3D texture to be used for sampling in device code
      */
-    static __host__ Texture3D fromHostData(const float h_data[], const PointIJK &size, cudaTextureFilterMode filterMode=cudaFilterModePoint) {
+    static __host__ Texture3D fromHostData(const float h_data[], const PointIJK &size, cudaTextureFilterMode filterMode=cudaFilterModePoint, float border=0.0f) {
 
-        return Texture3D(h_data, size, filterMode, cudaMemcpyHostToDevice);
+        return Texture3D(h_data, size, filterMode, border, cudaMemcpyHostToDevice);
     }
 
     /** @brief Create a texture from 3D device data
@@ -54,9 +54,9 @@ public:
      *      Desired filtering mode for sampling from this texture
      *  @returns A new 3D texture to be used for sampling in device code
      */
-    static __host__ Texture3D fromDeviceData(const float d_data[], const PointIJK &size, cudaTextureFilterMode filterMode=cudaFilterModePoint) {
+    static __host__ Texture3D fromDeviceData(const float d_data[], const PointIJK &size, cudaTextureFilterMode filterMode=cudaFilterModePoint, float border=0.0f) {
 
-        return Texture3D(d_data, size, filterMode, cudaMemcpyDeviceToDevice);
+        return Texture3D(d_data, size, filterMode, border, cudaMemcpyDeviceToDevice);
     }
 
     /** @brief Sample from this texture using real-valued pixel coordinates */

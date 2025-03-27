@@ -132,4 +132,14 @@ __host__ __device__ static inline int lowerBound(const T data[], int len, T key)
     return l;
 }
 
+__device__ static inline float sqr(float x)
+{
+    return x * x;
+}
+
+__device__ static inline float clamp(float x, float lo, float hi)
+{
+    return fminf(fmaxf(x, lo), hi);
+}
+
 #endif

@@ -152,7 +152,7 @@ __device__ float IMRTBeam::headTransmission(const PointXYZ* point_xyz, const flo
 __device__ void IMRTBeam::offAxisFactors(const PointXYZ * point_xyz, float * off_axis_factor, float * off_axis_softening){
 
 	const float distance_to_source = model.primary_src_dist - point_xyz->z;
-	const float distance_to_cax = sqrtf(powf(point_xyz->x, 2.0) + powf(point_xyz->y, 2.0)) * distance_to_source / model.primary_src_dist;
+	const float distance_to_cax = hypotf(point_xyz->x, point_xyz->y) * distance_to_source / model.primary_src_dist;
 
 	int i = lowerBound(this->model.profile_radius, this->model.n_profile_points, distance_to_cax);
 
@@ -185,7 +185,7 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 		return;
 	}
 
-	size_t vox_index = dose->pointIJKtoIndex(&vox_ijk);
+	unsigned vox_index = dose->pointIJKtoIndex(&vox_ijk);
 
 	PointXYZ vox_xyz, vox_head_xyz;
 	dose->pointIJKtoXYZ(&vox_ijk, &vox_xyz, beam);
@@ -203,7 +203,7 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 	float transmission_ratio = fminf(1.00, scatter_transmission / primary_transmission);
 
 	for(int i = 0; i < beam->model.n_spectral_energies; i++){
-		terma += (1.0 - transmission_ratio) * (beam->model.spectrum_primary_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * powf(beam->model.primary_src_dist / distance_to_primary_source, 2.0)) + 
+		terma += (1.0 - transmission_ratio) * (beam->model.spectrum_primary_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * sqr(beam->model.primary_src_dist / distance_to_primary_source)) +
 					transmission_ratio * beam->model.spectrum_scatter_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * (beam->model.scatter_src_dist / distance_to_scatter_source);
 	}
 
@@ -228,7 +228,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 		return;
 	}
 
-	size_t vox_index = dose->pointIJKtoIndex(&vox_ijk);
+	unsigned vox_index = dose->pointIJKtoIndex(&vox_ijk);
 
 	PointXYZ vox_img_xyz;
 	dose->pointIJKtoXYZ(&vox_ijk, &vox_img_xyz, beam);
@@ -246,7 +246,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 	float dose_value = 0.0;
 	float sp = dose->spacing / 10.0; //cm
-	
+
 	for(int i = 0; i < 6; i++){
 
 		// float th = g_kernel[0][i] * M_PI / 180.0;
@@ -285,21 +285,14 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 				beam->pointXYZHeadToImage(&ray_head_xyz, &ray_img_xyz);
 
 				dose->pointXYZtoTextureXYZ(&ray_img_xyz, &tex_img_xyz, beam);
-				if (dose->textureXYZWithinImage(&tex_img_xyz)) {
-					Ti = TERMATexture.sample(tex_img_xyz);
-					Di = DensityTexture.sample(tex_img_xyz) * sp;
-				} else {
-					Ti = 0.0;
-					Di = AIR_DENSITY * sp;
-				}
+				Ti = TERMATexture.sample(tex_img_xyz);
+				Di = DensityTexture.sample(tex_img_xyz) * sp;
 
-				if(Di <= 0.0){
-					Di = AIR_DENSITY * sp;
-				}
+				Di = fmaxf(Di, AIR_DENSITY * sp);
 
-				Rp = Rp * exp(-am * Di) + (Ti * sinf(th) * (Am / powf(am, 2)) * (1 - exp(-am * Di)));
-				Rs = Rs * (1 - (bm * Di)) + (Ti * Di * sinf(th) * (Bm / bm));
-				
+				Rp = Rp * expf(-am * Di) + (Ti * sinf(th) * (Am / (am * am)) * (1.0f - expf(-am * Di)));
+				Rs = Rs * (1.0f - (bm * Di)) + (Ti * Di * sinf(th) * (Bm / bm));
+
 				ray_length = ray_length - sp;
 
 			}
@@ -334,7 +327,7 @@ void photon_dose_cuda(int gpu_id, IMRTDose * h_dose, IMRTBeam * h_beam){
 
 	d_dose.WETArray = WETArray.get();
 	d_dose.DoseArray = DoseArray.get();
-	
+
 	DevicePointer<MLCPair> MLCPairArray(h_beam->mlc, h_beam->n_mlc_pairs);
 	DevicePointer<float> d_profile_radius(h_beam->model.profile_radius, h_beam->model.n_profile_points);
 	DevicePointer<float> d_profile_intensities(h_beam->model.profile_intensities, h_beam->model.n_profile_points);
@@ -361,7 +354,7 @@ void photon_dose_cuda(int gpu_id, IMRTDose * h_dose, IMRTBeam * h_beam){
 	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, TILE_WIDTH);
     dim3 dimGrid((d_dose.img_sz.k + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.j + TILE_WIDTH - 1) / TILE_WIDTH, (d_dose.img_sz.i + TILE_WIDTH - 1) / TILE_WIDTH);
 
-	auto DensityTexture = Texture3D::fromHostData(h_dose->DensityArray, h_dose->img_sz, cudaFilterModeLinear);
+	auto DensityTexture = Texture3D::fromHostData(h_dose->DensityArray, h_dose->img_sz, cudaFilterModeLinear, AIR_DENSITY);
 
     rayTraceKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, DensityTexture);
     termaKernel<<<dimGrid, dimBlock>>>(d_dose_ptr, d_beam_ptr, TERMAArray, ElectronArray);

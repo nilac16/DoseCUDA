@@ -66,7 +66,7 @@ __host__ void IMPTBeam::importLayers(){
 
 }
 
-__device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * sigma, size_t layer_id){
+__device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * sigma, unsigned layer_id){
 
 	const Layer &layer = this->layers[layer_id];
 	const float *depths, *sigmas, *idds;
@@ -91,7 +91,7 @@ __device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * s
 
 }
 
-__device__ float IMPTBeam::sigmaAir(float wet, float distance_to_source, size_t layer_id) {
+__device__ float IMPTBeam::sigmaAir(float wet, float distance_to_source, unsigned layer_id) {
 
 	Layer &layer = this->layers[layer_id];
 	float d = distance_to_source - wet + (0.7 * layer.r80);
@@ -101,17 +101,7 @@ __device__ float IMPTBeam::sigmaAir(float wet, float distance_to_source, size_t 
 
 }
 
-__device__ float clamp(float x, float lo, float hi)
-{
-	return fmaxf(fminf(x, hi), lo);
-}
-
-__device__ float sqr(float x)
-{
-	return x * x;
-}
-
-__device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * halo_weight, size_t layer_id) {
+__device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * halo_weight, unsigned layer_id) {
 
 	Layer &layer = this->layers[layer_id];
 
@@ -217,7 +207,7 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 	vox_ijk.k = threadIdx.x + (blockIdx.x * blockDim.x);
 	vox_ijk.j = threadIdx.y + (blockIdx.y * blockDim.y);
 	vox_ijk.i = (threadIdx.z + (blockIdx.z * blockDim.z)) / beam->n_layers;
-	size_t layer_id = (threadIdx.z + (blockIdx.z * blockDim.z)) % beam->n_layers;
+	unsigned layer_id = (threadIdx.z + (blockIdx.z * blockDim.z)) % beam->n_layers;
 
 	if (layer_id >= beam->n_layers){
 		return;
@@ -227,7 +217,7 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 		return;
 	}
 
-	size_t vox_index = dose->pointIJKtoIndex(&vox_ijk);
+	unsigned vox_index = dose->pointIJKtoIndex(&vox_ijk);
 
 	float wet = dose->WETArray[vox_index] * 10.0;
 
