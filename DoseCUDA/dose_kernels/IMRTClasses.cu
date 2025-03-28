@@ -247,6 +247,14 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	float dose_value = 0.0f;
 	float sp = dose->spacing / 10.0f; //cm
 
+	__shared__ struct {
+		float cosx, sinx;
+	} trig[12];
+
+	for (int i = 0; i < 12; i++) {
+		sincosf((float)i * CUDART_PI_F / 6.0f, &trig[i].sinx, &trig[i].cosx);
+	}
+
 	for(int i = 0; i < 6; i++){
 
 		float th = beam->model.kernel[i] * CUDART_PI_F / 180.0f;
@@ -256,12 +264,13 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 		float bm = beam->model.kernel[i + 24];
 		float ray_length_init = beam->model.kernel[i + 30];
 
+		const auto sinth = sinf(th), costh = cosf(th);
+
 		for(int j = 0; j < 12; j++){
 
-			float phi = (float)j * 30.0f * CUDART_PI_F / 180.0f;
-			float xr = sinf(th) * cosf(phi);
-			float yr = sinf(th) * sinf(phi);
-			float zr = cosf(th);
+			float xr = sinth * trig[j].cosx;
+			float yr = sinth * trig[j].sinx;
+			float zr = costh;
 
 			float Rs = 0.0f, Rp = 0.0f, Ti = 0.0f;
 			float Di = AIR_DENSITY * sp;
@@ -279,12 +288,13 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 				dose->pointXYZtoTextureXYZ(&ray_img_xyz, &tex_img_xyz, beam);
 				Ti = TERMATexture.sample(tex_img_xyz);
-				Di = DensityTexture.sample(tex_img_xyz) * sp;
+				Di = DensityTexture.sample(tex_img_xyz);
 
-				Di = fmaxf(Di, AIR_DENSITY * sp);
+				Di = fmaxf(Di, AIR_DENSITY) * sp;
 
-				Rp = Rp * expf(-am * Di) + (Ti * sinf(th) * (Am / (am * am)) * (1.0f - expf(-am * Di)));
-				Rs = Rs * (1.0f - (bm * Di)) + (Ti * Di * sinf(th) * (Bm / bm));
+				const auto expon = expf(-am * Di);
+				Rp = Rp * expon + (Ti * sinth * (Am / (am * am)) * (1.0f - expon));
+				Rs = Rs * (1.0f - (bm * Di)) + (Ti * Di * sinth * (Bm / bm));
 
 				ray_length = ray_length - sp;
 
