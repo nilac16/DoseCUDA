@@ -200,18 +200,18 @@ __global__ void termaKernel(IMRTDose * dose, IMRTBeam * beam, float * TERMAArray
 	float wet = dose->WETArray[vox_index];
 	float terma = 0.f;
 	float electron = 0.f;
-	float transmission_ratio = fminf(1.00, scatter_transmission / primary_transmission);
+	float transmission_ratio = fminf(1.00f, scatter_transmission / primary_transmission);
 
 	for(int i = 0; i < beam->model.n_spectral_energies; i++){
-		terma += (1.0 - transmission_ratio) * (beam->model.spectrum_primary_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * sqr(beam->model.primary_src_dist / distance_to_primary_source)) +
+		terma += (1.0f - transmission_ratio) * (beam->model.spectrum_primary_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * sqr(beam->model.primary_src_dist / distance_to_primary_source)) +
 					transmission_ratio * beam->model.spectrum_scatter_weights[i] * expf(-beam->model.spectrum_attenuation_coefficients[i] * wet * off_axis_softening) * (beam->model.scatter_src_dist / distance_to_scatter_source);
 	}
 
-	electron = fmaxf(0.0, (expf(-beam->model.electron_attenuation * wet) - expf(-beam->model.electron_attenuation * beam->model.electron_fitted_dmax)) / (1.0 - expf(-beam->model.electron_attenuation * beam->model.electron_fitted_dmax)));
+	electron = fmaxf(0.0f, (expf(-beam->model.electron_attenuation * wet) - expf(-beam->model.electron_attenuation * beam->model.electron_fitted_dmax)) / (1.0f - expf(-beam->model.electron_attenuation * beam->model.electron_fitted_dmax)));
 
-	TERMAArray[vox_index] = off_axis_factor * ((1.0 - beam->model.scatter_src_weight) * primary_transmission * terma + beam->model.scatter_src_weight * scatter_transmission * terma);
+	TERMAArray[vox_index] = off_axis_factor * ((1.0f - beam->model.scatter_src_weight) * primary_transmission * terma + beam->model.scatter_src_weight * scatter_transmission * terma);
 
-	ElectronArray[vox_index] = beam->model.electron_src_weight * (0.4 + (0.3 * transmission_ratio)) * electron * primary_transmission;
+	ElectronArray[vox_index] = beam->model.electron_src_weight * (0.4f + (0.3f * transmission_ratio)) * electron * primary_transmission;
 
     __syncthreads();
 
@@ -236,27 +236,20 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 	PointXYZ tex_img_xyz;
 	dose->pointXYZtoTextureXYZ(&vox_img_xyz, &tex_img_xyz, beam);
 
-	if (TERMATexture.sample(tex_img_xyz) <= 0.01){
-		dose->DoseArray[vox_index] = 0.0;
+	if (TERMATexture.sample(tex_img_xyz) <= 0.01f){
+		dose->DoseArray[vox_index] = 0.0f;
 		return;
 	}
 
 	PointXYZ vox_head_xyz;
 	beam->pointXYZImageToHead(&vox_img_xyz, &vox_head_xyz);
 
-	float dose_value = 0.0;
-	float sp = dose->spacing / 10.0; //cm
+	float dose_value = 0.0f;
+	float sp = dose->spacing / 10.0f; //cm
 
 	for(int i = 0; i < 6; i++){
 
-		// float th = g_kernel[0][i] * M_PI / 180.0;
-		// float Am = g_kernel[1][i];
-		// float am = g_kernel[2][i];
-		// float Bm = g_kernel[3][i];
-		// float bm = g_kernel[4][i];
-		// float ray_length_init = g_kernel[5][i];
-
-		float th = beam->model.kernel[i] * CUDART_PI_F / 180.0;
+		float th = beam->model.kernel[i] * CUDART_PI_F / 180.0f;
 		float Am = beam->model.kernel[i + 6];
 		float am = beam->model.kernel[i + 12];
 		float Bm = beam->model.kernel[i + 18];
@@ -265,21 +258,21 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 		for(int j = 0; j < 12; j++){
 
-			float phi = (float)j * 30.0 * CUDART_PI_F / 180.0;
+			float phi = (float)j * 30.0f * CUDART_PI_F / 180.0f;
 			float xr = sinf(th) * cosf(phi);
 			float yr = sinf(th) * sinf(phi);
 			float zr = cosf(th);
 
-			float Rs = 0.0, Rp = 0.0, Ti = 0.0;
+			float Rs = 0.0f, Rp = 0.0f, Ti = 0.0f;
 			float Di = AIR_DENSITY * sp;
 			float ray_length = ray_length_init;
 
-			while(ray_length >= 0) {
+			while(ray_length >= 0.0f) {
 
 				PointXYZ ray_head_xyz;
-				ray_head_xyz.x = fmaf(xr, ray_length * 10.0, vox_head_xyz.x);
-				ray_head_xyz.y = fmaf(yr, ray_length * 10.0, vox_head_xyz.y);
-				ray_head_xyz.z = fmaf(zr, ray_length * 10.0, vox_head_xyz.z);
+				ray_head_xyz.x = fmaf(xr, ray_length * 10.0f, vox_head_xyz.x);
+				ray_head_xyz.y = fmaf(yr, ray_length * 10.0f, vox_head_xyz.y);
+				ray_head_xyz.z = fmaf(zr, ray_length * 10.0f, vox_head_xyz.z);
 
 				PointXYZ ray_img_xyz;
 				beam->pointXYZHeadToImage(&ray_head_xyz, &ray_img_xyz);
@@ -304,7 +297,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 	dose_value += ElectronArray[vox_index];
 
-	if(!isnan(dose_value) && (dose_value >= 0.0)){
+	if(!isnan(dose_value) && (dose_value >= 0.0f)){
 		dose->DoseArray[vox_index] = beam->model.mu_cal * dose_value * beam->mu;
 	}
 

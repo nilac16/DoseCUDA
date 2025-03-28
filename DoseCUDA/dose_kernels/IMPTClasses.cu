@@ -94,7 +94,7 @@ __device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * s
 __device__ float IMPTBeam::sigmaAir(float wet, float distance_to_source, unsigned layer_id) {
 
 	Layer &layer = this->layers[layer_id];
-	float d = distance_to_source - wet + (0.7 * layer.r80);
+	float d = distance_to_source - wet + (0.7f * layer.r80);
 	const float *coef = &this->divergence_params[this->dvp_len * layer.energy_id + 2];
 
 	return fmaf(fmaf(coef[0], d, coef[1]), d, coef[2]);
@@ -105,24 +105,24 @@ __device__ void IMPTBeam::nuclearHalo(float wet, float * halo_sigma, float * hal
 
 	Layer &layer = this->layers[layer_id];
 
-	wet = clamp(wet, 0.1, layer.r80 - 0.1);
+	wet = clamp(wet, 0.1f, layer.r80 - 0.1f);
 
-	float halo_sigma_ = 2.85 + (0.0014 * layer.r80 * logf(wet + 3.0)) +
-	(0.06 * wet) - (7.4e-5 * sqr(wet)) -
-	((0.22 * layer.r80) / sqr(wet - layer.r80 - 5.0));
+	float halo_sigma_ = 2.85f + (0.0014f * layer.r80 * logf(wet + 3.0f)) +
+	(0.06f * wet) - (7.4e-5f * sqr(wet)) -
+	((0.22f * layer.r80) / sqr(wet - layer.r80 - 5.0f));
 
-	float halo_weight_ = 0.052 * logf(1.13 + (wet / (11.2 - (0.023 * layer.r80)))) +
-	(0.35 * ((0.0017 * sqr(layer.r80)) - layer.r80) / (sqr(layer.r80 + 3.0) - sqr(wet))) -
-	(1.61e-9 * wet * sqr(layer.r80 + 3.0));
+	float halo_weight_ = 0.052f * logf(1.13f + (wet / (11.2f - (0.023f * layer.r80)))) +
+	(0.35f * ((0.0017f * sqr(layer.r80)) - layer.r80) / (sqr(layer.r80 + 3.0f) - sqr(wet))) -
+	(1.61e-9f * wet * sqr(layer.r80 + 3.0f));
 
-	*halo_sigma = fmaxf(halo_sigma_, 0.0);
-	*halo_weight = clamp(halo_weight_, 0.0, 0.9);
+	*halo_sigma = fmaxf(halo_sigma_, 0.0f);
+	*halo_weight = clamp(halo_weight_, 0.0f, 0.9f);
 
 }
 
 __device__ float IMPTBeam::caxDistance(const Spot &spot, const PointXYZ &vox)
 {
-	PointXYZ tangent = { spot.x / model.vsadx, spot.y / model.vsady, -1.0 };
+	PointXYZ tangent = { spot.x / model.vsadx, spot.y / model.vsady, -1.0f };
 	PointXYZ ray = { vox.x - spot.x, vox.y - spot.y, vox.z };
 
 	const auto tansqr = xyz_dotproduct(tangent, tangent);
@@ -155,7 +155,7 @@ __global__ void smoothRayKernel(IMPTDose * dose, CudaBeam * beam, float * Smooth
 	PointXYZ uvec;
 	beam->unitVectorToSource(&vox_xyz, &uvec);
 
-	float step_length = 1.0;
+	float step_length = 1.0f;
 
 	PointXYZ vox_head_xyz;
 	PointXYZ vox_head_xyz_conv;
@@ -173,10 +173,10 @@ __global__ void smoothRayKernel(IMPTDose * dose, CudaBeam * beam, float * Smooth
 	for (int i=0; i<6; i++){
 		float sinx, cosx;
 
-		dr = 1.0;
-		sincosf((float)i * CUDART_PI_F / 3.0, &sinx, &cosx);
+		dr = 1.0f;
+		sincosf((float)i * CUDART_PI_F / 3.0f, &sinx, &cosx);
 
-		while ((dr < (center_wet * 10.0)) & (dr < 10.0)){
+		while ((dr < (center_wet * 10.0f)) && (dr < 10.0f)){
 
 			vox_head_xyz_conv.x = vox_head_xyz.x + (dr * cosx);
 			vox_head_xyz_conv.y = vox_head_xyz.y + (dr * sinx);
@@ -219,9 +219,9 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	unsigned vox_index = dose->pointIJKtoIndex(&vox_ijk);
 
-	float wet = dose->WETArray[vox_index] * 10.0;
+	float wet = dose->WETArray[vox_index] * 10.0f;
 
-	if (wet > (1.1 * beam->layers[layer_id].r80)){
+	if (wet > (1.1f * beam->layers[layer_id].r80)){
 		return;
 	}
 
@@ -240,10 +240,10 @@ __global__ void pencilBeamKernel(IMPTDose * dose, IMPTBeam * beam){
 
 	Layer &layer = beam->layers[layer_id];
 
-	float primary_dose_factor = (1.0 - halo_weight) * idd / (2.0 * CUDART_PI_F * sqr(sigma_total));
-	float halo_dose_factor = halo_weight * idd / (2.0 * CUDART_PI_F * sqr(sigma_halo_total));
+	float primary_dose_factor = (1.0f - halo_weight) * idd / (2.0f * CUDART_PI_F * sqr(sigma_total));
+	float halo_dose_factor = halo_weight * idd / (2.0f * CUDART_PI_F * sqr(sigma_halo_total));
 
-	float total_dose = 0.0, primary_dose, halo_dose;
+	float total_dose = 0.0f, primary_dose, halo_dose;
 
 	beam->pointXYZImageToHead(&vox_xyz, &vox_head_xyz);
 
