@@ -98,6 +98,7 @@ class IMPTBeam(Beam):
 
         self.spot_list = []
         self.n_spots = 0
+        self.dicom_rangeshifter_id = None
 
     def addSpotData(self, cp, energy_id):
 
@@ -127,14 +128,14 @@ class IMPTPlan(Plan):
         self.lut_sigmas = []
         self.lut_idds = []
         self.divergence_params = []
-        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", machine_name, "energies.csv"))
+        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", machine_name, "RS0", "energies.csv"))
         self.energy_table = pd.read_csv(energy_list_path)
         self.energy_labels = []
         self.loadLUT()
 
     def loadLUT(self):
 
-        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "energies.csv"))
+        energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "RS0", "energies.csv"))
         self.energy_table = pd.read_csv(energy_list_path)
 
         self.energy_labels = self.energy_table["energy_label"].to_numpy()
@@ -152,7 +153,7 @@ class IMPTPlan(Plan):
             lut_idds = []
             divergence_params = []
             
-            lut_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "energy_%03d.csv" % energy_id))
+            lut_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "RS0", "energy_%03d.csv" % energy_id))
 
             with open(lut_path, "r") as f:
                 f.readline() # header
@@ -203,7 +204,10 @@ class IMPTPlan(Plan):
             ibs = ds.IonBeamSequence[i]
             
             beam = IMPTBeam()
-            
+
+            if ibs.RangeShifterSequence and ibs.RangeShifterSequence[0].RangeShifterID is not None:
+                beam.dicom_rangeshifter_id = ibs.RangeShifterSequence[0].RangeShifterID
+
             beam.gantry_angle = float(ibs.IonControlPointSequence[0].GantryAngle)
             beam.couch_angle = float(ibs.IonControlPointSequence[0].PatientSupportAngle)
             beam.iso = np.array(ibs.IonControlPointSequence[0].IsocenterPosition, dtype=np.single)
