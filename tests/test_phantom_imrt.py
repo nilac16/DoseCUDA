@@ -15,7 +15,7 @@ dose.createCubePhantom()
 
 # define beam parameters
 plan.addSquareField()
-plan.addSquareField(15.0, 15.0, mu=50, gantry_angle=90.0, collimator_angle=20.0)
+plan.addSquareField('6', 15.0, 15.0, mu=50, gantry_angle=90.0, collimator_angle=20.0)
 
 # compute the dose
 dose.computeIMRTPlan(plan)

@@ -11,8 +11,10 @@ import dose_kernels
 
 class IMRTBeamModel:
 
-    def __init__(self, path_to_model):
+    def __init__(self, dicom_energy_label, path_to_model, folder_energy_label):
         
+        self.dicom_energy_label = dicom_energy_label
+
         mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "mlc_geometry.csv"))
         mlc_geometry = pd.read_csv(mlc_geometry_path)
 
@@ -21,11 +23,12 @@ class IMRTBeamModel:
         self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
         self.n_mlc_pairs = len(self.mlc_index)
 
-        kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "kernel.csv"))
+        kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "kernel.csv"))
         kernel = pd.read_csv(kernel_path)
         self.kernel = np.array(kernel.to_numpy(), dtype=np.single)
 
-        machine_parameters_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_parameters.csv"))
+        machine_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_geometry.csv"))
+        beam_parameter_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "beam_parameters.csv"))
 
         self.output_factor_equivalent_squares = None
         self.output_factor_values = None
@@ -50,16 +53,7 @@ class IMRTBeamModel:
         self.jaw_transmission = None
         self.mlc_transmission = None
 
-        for line in open(machine_parameters_path):
-
-            if line.startswith('output_factor_equivalent_squares'):
-                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('output_factor_values'):
-                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('mu_calibration'):
-                self.mu_calibration = float(line.split(',')[1])
+        for line in open(machine_geometry_path):
 
             if line.startswith('primary_source_distance'):
                 self.primary_source_distance = float(line.split(',')[1])
@@ -69,6 +63,24 @@ class IMRTBeamModel:
 
             if line.startswith('mlc_distance'):
                 self.mlc_distance = float(line.split(',')[1])
+
+            if line.startswith('has_xjaws'):
+                self.has_xjaws = bool(line.split(',')[1])
+
+            if line.startswith('has_yjaws'):
+                self.has_yjaws = bool(line.split(',')[1])
+
+
+        for line in open(beam_parameter_path):
+
+            if line.startswith('output_factor_equivalent_squares'):
+                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('output_factor_values'):
+                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
+
+            if line.startswith('mu_calibration'):
+                self.mu_calibration = float(line.split(',')[1])
 
             if line.startswith('scatter_source_weight'):
                 self.scatter_source_weight = float(line.split(',')[1])
@@ -102,12 +114,6 @@ class IMRTBeamModel:
             
             if line.startswith('electron_source_weight'):
                 self.electron_source_weight = float(line.split(',')[1])
-
-            if line.startswith('has_xjaws'):
-                self.has_xjaws = bool(line.split(',')[1])
-
-            if line.startswith('has_yjaws'):
-                self.has_yjaws = bool(line.split(',')[1])
 
             if line.startswith('electron_fitted_dmax'):
                 self.electron_fitted_dmax = float(line.split(',')[1])
@@ -266,9 +272,16 @@ class IMRTDoseGrid(DoseGrid):
 
         for beam in plan.beam_list:
             beam_dose = np.zeros(self.Density.shape, dtype=np.single)
-            beam_model = plan.beam_model
+            
+            try:           
+                model_index = list(plan.dicom_energy_label.astype(str)).index(beam.dicom_energy_label)
+            except ValueError:
+                print("Beam model not found for beam energy %s" % beam.dicom_energy_label)
+                sys.exit(1)
+            beam_model = plan.beam_models[model_index]
+
             for cp in beam.cp_list:
-                output_factor = plan.beam_model.outputFactor(cp)
+                output_factor = beam_model.outputFactor(cp)
                 cp_dose = dose_kernels.photon_dose_cuda(beam_model, density_object, cp, gpu_id)
                 beam_dose += cp_dose * output_factor
                 
@@ -284,6 +297,7 @@ class IMRTBeam(Beam):
         super().__init__()
         self.cp_list = []
         self.n_cps = 0
+        self.dicom_energy_label = None
 
     def addControlPoint(self, cp):
         self.cp_list.append(cp)
@@ -297,7 +311,16 @@ class IMRTPlan(Plan):
         super().__init__()
 
         self.machine_name = machine_name
-        self.beam_model = IMRTBeamModel(os.path.join("lookuptables", "photons", machine_name))
+
+        energy_list = pd.read_csv(pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "photons", machine_name, "energy_labels.csv")))
+        self.dicom_energy_label = energy_list["dicom_energy_label"]
+        self.folder_energy_label = energy_list["folder_energy_label"]
+
+        self.beam_models = []
+        for d,f in zip(self.dicom_energy_label, self.folder_energy_label):
+            self.beam_models.append(IMRTBeamModel(d, os.path.join("lookuptables", "photons", machine_name), f))
+
+        # self.beam_model = IMRTBeamModel(os.path.join("lookuptables", "photons", machine_name))
 
     def readPlanDicom(self, plan_path):
 
@@ -316,7 +339,7 @@ class IMRTPlan(Plan):
                 for cp in beam.ControlPointSequence:
                     cpi = cp.ControlPointIndex
                     if cpi == 0:
-                        
+                        imrt_beam.dicom_energy_label = cp.NominalBeamEnergy
                         imrt_beam.iso = np.array([cp.IsocenterPosition[0], cp.IsocenterPosition[1], cp.IsocenterPosition[2]], dtype=np.single)
                         cumulative_mu = 0.0
                         ca = cp.BeamLimitingDeviceAngle
@@ -337,25 +360,25 @@ class IMRTPlan(Plan):
                         mu = cp.CumulativeMetersetWeight - cumulative_mu
 
                         if mlc is not None:
-                            mlc = np.reshape(mlc, (2, self.beam_model.n_mlc_pairs))
-                            mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.reshape(mlc, (2, self.beam_models[0].n_mlc_pairs))
+                            mlc = np.array(np.vstack((mlc, self.beam_models[0].mlc_offsets.reshape(1, -1), self.beam_models[0].mlc_widths.reshape(1, -1))), dtype=np.single)
                             mlc = np.transpose(mlc)
 
                         else:
 
-                            mlc = np.zeros((2, self.beam_model.n_mlc_pairs), dtype=np.single)
+                            mlc = np.zeros((2, self.beam_models[0].n_mlc_pairs), dtype=np.single)
 
                             if xjaws is not None:
                                 mlc[0, :] = xjaws[0]
                                 mlc[1, :] = xjaws[1]
 
                             if yjaws is not None:
-                                for i in range(self.beam_model.n_mlc_pairs):
-                                    if(self.beam_model.mlc_offsets[i] < yjaws[0]) or (self.beam_model.mlc_offsets[i] > yjaws[1]):
+                                for i in range(self.beam_models[0].n_mlc_pairs):
+                                    if(self.beam_models[0].mlc_offsets[i] < yjaws[0]) or (self.beam_models[0].mlc_offsets[i] > yjaws[1]):
                                         mlc[0, i] = 0.0
                                         mlc[1, i] = 0.0
                             
-                            mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
+                            mlc = np.array(np.vstack((mlc, self.beam_models[0].mlc_offsets.reshape(1, -1), self.beam_models[0].mlc_widths.reshape(1, -1))), dtype=np.single)
                             mlc = np.transpose(mlc)
 
                         control_point = IMRTControlPoint(imrt_beam.iso, mu * total_mu, mlc, ga, ca, ta, xjaws, yjaws)
@@ -379,25 +402,26 @@ class IMRTPlan(Plan):
                 
                 self.addBeam(imrt_beam)
 
-    def addSquareField(self, dimx=10, dimy=10, mu=100, gantry_angle=0.0, collimator_angle=0.0, table_angle=0.0):
+    def addSquareField(self, dicom_energy_label='6', dimx=10, dimy=10, mu=100, gantry_angle=0.0, collimator_angle=0.0, table_angle=0.0):
 
         imrt_beam = IMRTBeam()
+        imrt_beam.dicom_energy_label = dicom_energy_label
         iso = np.array([0.0, 0.0, 0.0], dtype=np.single)
 
         dimx *= 10.0 # convert to mm
         dimy *= 10.0 # convert to mm
 
         # create a square field
-        mlc = np.zeros((2, self.beam_model.n_mlc_pairs), dtype=np.single)
+        mlc = np.zeros((2, self.beam_models[0].n_mlc_pairs), dtype=np.single)
         mlc[0, :] = -dimx / 2.0
         mlc[1, :] = dimx / 2.0
 
-        for i in range(self.beam_model.n_mlc_pairs):
-            if(self.beam_model.mlc_offsets[i] < -(dimy / 2.0)) or (self.beam_model.mlc_offsets[i] > (dimy / 2.0)):
+        for i in range(self.beam_models[0].n_mlc_pairs):
+            if(self.beam_models[0].mlc_offsets[i] < -(dimy / 2.0)) or (self.beam_models[0].mlc_offsets[i] > (dimy / 2.0)):
                 mlc[0, i] = 0.0
                 mlc[1, i] = 0.0
 
-        mlc = np.array(np.vstack((mlc, self.beam_model.mlc_offsets.reshape(1, -1), self.beam_model.mlc_widths.reshape(1, -1))), dtype=np.single)
+        mlc = np.array(np.vstack((mlc, self.beam_models[0].mlc_offsets.reshape(1, -1), self.beam_models[0].mlc_widths.reshape(1, -1))), dtype=np.single)
         mlc = np.transpose(mlc)
 
         jawx = np.array([-dimx / 2.0, dimx / 2.0], dtype=np.single)
