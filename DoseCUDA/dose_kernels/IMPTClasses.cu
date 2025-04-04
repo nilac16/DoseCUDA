@@ -55,6 +55,8 @@ __host__ void IMPTBeam::importLayers(){
 		layer.r80 = this->divergence_params[this->dvp_len * energy_id + 1];
 		layer.energy = this->divergence_params[this->dvp_len * energy_id];
 
+		// printf("Layer %d: %d spots, r80 = %.2f\n", this->n_layers, layer.n_spots, layer.r80);
+
 		this->n_layers++;
 
 		spot_start += spot_count;

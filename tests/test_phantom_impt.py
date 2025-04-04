@@ -15,6 +15,7 @@ beam = IMPTBeam()
 dose.createCubePhantom()
 
 # define a spot list - create a circle of spots incrementing the energy id
+beam.dicom_rangeshifter_label = '0'
 n_spots = 98
 for energy_id in range(n_spots):
     theta = 2.0 * 3.14159 * energy_id / n_spots
