@@ -105,14 +105,14 @@ static bool pyobject_getbool(PyObject *self, const char *attr, bool *value) {
 }
 
 
-static IMPTBeam::Model proton_beam_model(void/* PyObject * model */) {
+// static IMPTBeam::Model proton_beam_model(void/* PyObject * model */) {
 
-	IMPTBeam::Model model;
+// 	IMPTBeam::Model model;
 
-	model.vsadx = VSADX;
-	model.vsady = VSADY;
-	return model;
-}
+// 	model.vsadx = VSADX;
+// 	model.vsady = VSADY;
+// 	return model;
+// }
 
 
 static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
@@ -215,71 +215,71 @@ static PyObject* proton_raytrace(PyObject *self, PyObject *args) {
 }
 
 
-static PyObject* proton_raytrace2(PyObject *self, PyObject *args) {
+// static PyObject* proton_raytrace2(PyObject *self, PyObject *args) {
 
-	PyArrayObject *density_array, *iso;
-	double gantry_angle, couch_angle, spacing;
-	int gpu_id;
+// 	PyArrayObject *density_array, *iso;
+// 	double gantry_angle, couch_angle, spacing;
+// 	int gpu_id;
 
-	if (!PyArg_ParseTuple(args, "O!O!dddi",
-			&PyArray_Type, &density_array,
-			&PyArray_Type, &iso,
-			&gantry_angle,
-			&couch_angle,
-			&spacing,
-			&gpu_id))
-		return NULL ;
+// 	if (!PyArg_ParseTuple(args, "O!O!dddi",
+// 			&PyArray_Type, &density_array,
+// 			&PyArray_Type, &iso,
+// 			&gantry_angle,
+// 			&couch_angle,
+// 			&spacing,
+// 			&gpu_id))
+// 		return NULL ;
 
-	if (!pyarray_typecheck(density_array, 3, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
-		return NULL ;
-	}
+// 	if (!pyarray_typecheck(density_array, 3, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
+// 		return NULL ;
+// 	}
 
-	if (!pyarray_typecheck(iso, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
-		return NULL ;
-	}
+// 	if (!pyarray_typecheck(iso, 1, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
+// 		return NULL ;
+// 	}
 
-	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
+// 	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
 
-	try {
+// 	try {
 
-		size_t dims[3] = {
-			(size_t)PyArray_DIMS(density_array)[0],
-			(size_t)PyArray_DIMS(density_array)[1],
-			(size_t)PyArray_DIMS(density_array)[2],
-		};
+// 		size_t dims[3] = {
+// 			(size_t)PyArray_DIMS(density_array)[0],
+// 			(size_t)PyArray_DIMS(density_array)[1],
+// 			(size_t)PyArray_DIMS(density_array)[2],
+// 		};
 
-		CudaDose dose_obj = CudaDose(dims, spacing);
-		HostPointer<float> WETArray(dose_obj.num_voxels);
+// 		CudaDose dose_obj = CudaDose(dims, spacing);
+// 		HostPointer<float> WETArray(dose_obj.num_voxels);
 
-		dose_obj.DensityArray = pyarray_as<float>(density_array);
-		dose_obj.WETArray = WETArray.get();
+// 		dose_obj.DensityArray = pyarray_as<float>(density_array);
+// 		dose_obj.WETArray = WETArray.get();
 
-		auto model = proton_beam_model();
-		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(iso), adjusted_gantry_angle, couch_angle, &model);
+// 		auto model = proton_beam_model();
+// 		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(iso), adjusted_gantry_angle, couch_angle, &model);
 
-		proton_raytrace_cuda(gpu_id, &dose_obj, &beam_obj);
+// 		proton_raytrace_cuda(gpu_id, &dose_obj, &beam_obj);
 
-		PyObject *return_wet = PyArray_SimpleNewFromData(3, PyArray_DIMS(density_array), PyArray_TYPE(density_array), WETArray.release());
+// 		PyObject *return_wet = PyArray_SimpleNewFromData(3, PyArray_DIMS(density_array), PyArray_TYPE(density_array), WETArray.release());
 
-		PyArray_ENABLEFLAGS((PyArrayObject*) return_wet, NPY_ARRAY_OWNDATA);
+// 		PyArray_ENABLEFLAGS((PyArrayObject*) return_wet, NPY_ARRAY_OWNDATA);
 
-		return return_wet;
+// 		return return_wet;
 
-	} catch (std::bad_alloc &) {
+// 	} catch (std::bad_alloc &) {
 
-		PyErr_SetString(PyExc_MemoryError, "Not enough host memory");
+// 		PyErr_SetString(PyExc_MemoryError, "Not enough host memory");
 
-	} catch (std::runtime_error &e) {
+// 	} catch (std::runtime_error &e) {
 
-		PyErr_Format(PyExc_RuntimeError, "CUDA error: %s", e.what());
+// 		PyErr_Format(PyExc_RuntimeError, "CUDA error: %s", e.what());
 
-	}
+// 	}
 
-	return NULL;
+// 	return NULL;
 
-}
+// }
 
 
 static bool spot_compare(const Spot &a, const Spot &b)
@@ -321,7 +321,7 @@ static void make_mlc_array(PyArrayObject *mlc, HostPointer<MLCPair> &res)
 }
 
 
-static PyObject* proton_spot_new_not_working(PyObject *self, PyObject *args) {
+static PyObject* proton_spot(PyObject *self, PyObject *args) {
 
 	PyObject *model_instance, *volume_instance, *wet_instance, *beam_instance;
 	int gpu_id;	
@@ -406,7 +406,7 @@ static PyObject* proton_spot_new_not_working(PyObject *self, PyObject *args) {
 		dose_obj.WETArray = pyarray_as<float>(wet_array);
 
 		// beam model object
-		auto model = proton_beam_model();
+		auto model = IMPTBeam::Model();
 		model.vsadx = vsadx;
 		model.vsady = vsady;
 
@@ -455,104 +455,221 @@ static PyObject* proton_spot_new_not_working(PyObject *self, PyObject *args) {
 }
 
 
-static PyObject* proton_spot(PyObject *self, PyObject *args) {
+// static PyObject* proton_spot3(PyObject *self, PyObject *args) {
 
-	PyArrayObject *wet_array, *density_array, *isocenter, *spots, *lut_depths, *lut_sigmas, *lut_idds, *lut_divergence_params;
-	double gantry_angle, couch_angle, density_spacing;
-	int gpu_id;
+// 	PyArrayObject *wet_array, *density_array, *isocenter, *spots, *lut_depths, *lut_sigmas, *lut_idds, *lut_divergence_params;
+// 	double gantry_angle, couch_angle, density_spacing;
+// 	int gpu_id;
 
-	if (!PyArg_ParseTuple(args, "O!O!O!ddO!dO!O!O!O!i",
-			&PyArray_Type, &wet_array,
-			&PyArray_Type, &density_array,
-			&PyArray_Type, &isocenter,
-			&gantry_angle,
-			&couch_angle,
-			&PyArray_Type, &spots,
-			&density_spacing,
-			&PyArray_Type, &lut_depths,
-			&PyArray_Type, &lut_sigmas,
-			&PyArray_Type, &lut_idds,
-			&PyArray_Type, &lut_divergence_params,
-			&gpu_id))
-		return NULL ;
+// 	PyObject *model_instance, *volume_instance, *wet_instance, *beam_instance;
 
-	if (!pyarray_typecheck(wet_array, 3, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
-		return NULL ;
-	}
+// 	if (!PyArg_ParseTuple(args, "OOOOO!O!O!ddO!dO!O!O!O!i", &model_instance, &volume_instance, &wet_instance, &beam_instance,
+// 			&PyArray_Type, &wet_array,
+// 			&PyArray_Type, &density_array,
+// 			&PyArray_Type, &isocenter,
+// 			&gantry_angle,
+// 			&couch_angle,
+// 			&PyArray_Type, &spots,
+// 			&density_spacing,
+// 			&PyArray_Type, &lut_depths,
+// 			&PyArray_Type, &lut_sigmas,
+// 			&PyArray_Type, &lut_idds,
+// 			&PyArray_Type, &lut_divergence_params,
+// 			&gpu_id))
+// 		return NULL ;
 
-	if (!pyarray_typecheck(isocenter, 1, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
-		return NULL ;
-	}
+// 	PyArrayObject *lut_depths_array, *lut_sigmas_array, *lut_idds_array, *lut_divergence_params_array;
+// 	if (!pyobject_getarray(model_instance, "divergence_params", 2, &lut_divergence_params_array)
+// 	|| !pyobject_getarray(model_instance, "lut_depths", 2, &lut_depths_array)
+// 	|| !pyobject_getarray(model_instance, "lut_sigmas", 2, &lut_sigmas_array)
+// 	|| !pyobject_getarray(model_instance, "lut_idds", 2, &lut_idds_array)) {
+// 		return NULL;
+// 	}
 
-	if (!pyarray_typecheck(spots, 2, NPY_FLOAT)) {
-		PyErr_SetString(PyExc_ValueError, "Spot data array must be two-dimensional and of type float.");
-		return NULL ;
-	}
+// 	if (!pyarray_typecheck(wet_array, 3, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
+// 		return NULL ;
+// 	}
 
-	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
-	size_t n_energies = PyArray_DIM(lut_depths, 0);
-	size_t n_spots = PyArray_DIM(spots, 0);
+// 	if (!pyarray_typecheck(isocenter, 1, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
+// 		return NULL ;
+// 	}
 
-	try {
+// 	if (!pyarray_typecheck(spots, 2, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Spot data array must be two-dimensional and of type float.");
+// 		return NULL ;
+// 	}
 
-		// Create dose
-		size_t dims[3] = {
-			(size_t)PyArray_DIMS(wet_array)[0],
-			(size_t)PyArray_DIMS(wet_array)[1],
-			(size_t)PyArray_DIMS(wet_array)[2],
-		};
+// 	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
+// 	size_t n_energies = PyArray_DIM(lut_depths_array, 0);
+// 	size_t n_spots = PyArray_DIM(spots, 0);
 
-		IMPTDose dose_obj = IMPTDose(dims, density_spacing);
-		HostPointer<float> DoseArray(dose_obj.num_voxels);
+// 	float *lut_depths1 = pyarray_as<float>(lut_depths);
+// 	float *lut_depths2 = pyarray_as<float>(lut_depths_array);
 
-		dose_obj.DoseArray = DoseArray.get();
-		dose_obj.DensityArray = pyarray_as<float>(density_array);
-		dose_obj.WETArray = pyarray_as<float>(wet_array);
+// 	for (size_t i = 0; i < 500; i++) {
+// 		printf("lut_depths1 %f, lut_depths2 %f\n", lut_depths1[i], lut_depths2[i]);
+// 	}
 
-		// Create beam
-		auto model = proton_beam_model();
-		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, &model);
-		HostPointer<Layer> LayerArray(n_energies);
-		HostPointer<Spot> SpotArray(n_spots);
+// 	try {
 
-		make_spot_array(spots, SpotArray);
+// 		// Create dose
+// 		size_t dims[3] = {
+// 			(size_t)PyArray_DIMS(wet_array)[0],
+// 			(size_t)PyArray_DIMS(wet_array)[1],
+// 			(size_t)PyArray_DIMS(wet_array)[2],
+// 		};
 
-		beam_obj.n_energies = n_energies;
-		beam_obj.layers = LayerArray.get();
-		beam_obj.spots = SpotArray.get();
-		beam_obj.n_spots = n_spots;
-		beam_obj.divergence_params = pyarray_as<float>(lut_divergence_params);
-		beam_obj.dvp_len = 5;	// R80, energy, quadratic coefficients
-		beam_obj.lut_depths = pyarray_as<float>(lut_depths);
-		beam_obj.lut_sigmas = pyarray_as<float>(lut_sigmas);
-		beam_obj.lut_idds = pyarray_as<float>(lut_idds);
-		beam_obj.lut_len = LUT_LENGTH;	// This can now be changed at runtime
+// 		IMPTDose dose_obj = IMPTDose(dims, density_spacing);
+// 		HostPointer<float> DoseArray(dose_obj.num_voxels);
 
-		beam_obj.importLayers();
+// 		dose_obj.DoseArray = DoseArray.get();
+// 		dose_obj.DensityArray = pyarray_as<float>(density_array);
+// 		dose_obj.WETArray = pyarray_as<float>(wet_array);
 
-		proton_spot_cuda(gpu_id, &dose_obj, &beam_obj);
+// 		// Create beam
+// 		auto model = proton_beam_model();
+// 		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, &model);
+// 		HostPointer<Layer> LayerArray(n_energies);
+// 		HostPointer<Spot> SpotArray(n_spots);
 
-		PyObject *return_dose = PyArray_SimpleNewFromData(3, PyArray_DIMS(wet_array), PyArray_TYPE(wet_array), DoseArray.release());
+// 		make_spot_array(spots, SpotArray);
 
-		PyArray_ENABLEFLAGS((PyArrayObject*) return_dose, NPY_ARRAY_OWNDATA);
+// 		beam_obj.n_energies = n_energies;
+// 		beam_obj.layers = LayerArray.get();
+// 		beam_obj.spots = SpotArray.get();
+// 		beam_obj.n_spots = n_spots;
+// 		beam_obj.divergence_params = pyarray_as<float>(lut_divergence_params_array);
+// 		beam_obj.dvp_len = 5;	// R80, energy, quadratic coefficients
+// 		beam_obj.lut_depths = pyarray_as<float>(lut_depths_array);
+// 		beam_obj.lut_sigmas = pyarray_as<float>(lut_sigmas_array);
+// 		beam_obj.lut_idds = pyarray_as<float>(lut_idds_array);
+// 		beam_obj.lut_len = LUT_LENGTH;	// This can now be changed at runtime
 
-		return return_dose;
+// 		beam_obj.importLayers();
 
-	} catch (std::bad_alloc &) {
+// 		proton_spot_cuda(gpu_id, &dose_obj, &beam_obj);
 
-		PyErr_SetString(PyExc_MemoryError, "Not enough host memory");
+// 		PyObject *return_dose = PyArray_SimpleNewFromData(3, PyArray_DIMS(wet_array), PyArray_TYPE(wet_array), DoseArray.release());
 
-	} catch (std::runtime_error &e) {
+// 		PyArray_ENABLEFLAGS((PyArrayObject*) return_dose, NPY_ARRAY_OWNDATA);
 
-		PyErr_Format(PyExc_RuntimeError, "CUDA error: %s", e.what());
+// 		return return_dose;
 
-	}
+// 	} catch (std::bad_alloc &) {
 
-	return NULL;
+// 		PyErr_SetString(PyExc_MemoryError, "Not enough host memory");
 
-}
+// 	} catch (std::runtime_error &e) {
+
+// 		PyErr_Format(PyExc_RuntimeError, "CUDA error: %s", e.what());
+
+// 	}
+
+// 	return NULL;
+
+// }
+
+
+// static PyObject* proton_spot2(PyObject *self, PyObject *args) {
+
+// 	PyArrayObject *wet_array, *density_array, *isocenter, *spots, *lut_depths, *lut_sigmas, *lut_idds, *lut_divergence_params;
+// 	double gantry_angle, couch_angle, density_spacing;
+// 	int gpu_id;
+
+// 	if (!PyArg_ParseTuple(args, "O!O!O!ddO!dO!O!O!O!i",
+// 			&PyArray_Type, &wet_array,
+// 			&PyArray_Type, &density_array,
+// 			&PyArray_Type, &isocenter,
+// 			&gantry_angle,
+// 			&couch_angle,
+// 			&PyArray_Type, &spots,
+// 			&density_spacing,
+// 			&PyArray_Type, &lut_depths,
+// 			&PyArray_Type, &lut_sigmas,
+// 			&PyArray_Type, &lut_idds,
+// 			&PyArray_Type, &lut_divergence_params,
+// 			&gpu_id))
+// 		return NULL ;
+
+// 	if (!pyarray_typecheck(wet_array, 3, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Density array must be three-dimensional and of type float.");
+// 		return NULL ;
+// 	}
+
+// 	if (!pyarray_typecheck(isocenter, 1, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Isocenter array must be one-dimensional and of type float.");
+// 		return NULL ;
+// 	}
+
+// 	if (!pyarray_typecheck(spots, 2, NPY_FLOAT)) {
+// 		PyErr_SetString(PyExc_ValueError, "Spot data array must be two-dimensional and of type float.");
+// 		return NULL ;
+// 	}
+
+// 	float adjusted_gantry_angle = fmodf(gantry_angle + 180.0f, 360.0f);
+// 	size_t n_energies = PyArray_DIM(lut_depths, 0);
+// 	size_t n_spots = PyArray_DIM(spots, 0);
+
+// 	try {
+
+// 		// Create dose
+// 		size_t dims[3] = {
+// 			(size_t)PyArray_DIMS(wet_array)[0],
+// 			(size_t)PyArray_DIMS(wet_array)[1],
+// 			(size_t)PyArray_DIMS(wet_array)[2],
+// 		};
+
+// 		IMPTDose dose_obj = IMPTDose(dims, density_spacing);
+// 		HostPointer<float> DoseArray(dose_obj.num_voxels);
+
+// 		dose_obj.DoseArray = DoseArray.get();
+// 		dose_obj.DensityArray = pyarray_as<float>(density_array);
+// 		dose_obj.WETArray = pyarray_as<float>(wet_array);
+
+// 		// Create beam
+// 		auto model = proton_beam_model();
+// 		IMPTBeam beam_obj = IMPTBeam(pyarray_as<float>(isocenter), adjusted_gantry_angle, couch_angle, &model);
+// 		HostPointer<Layer> LayerArray(n_energies);
+// 		HostPointer<Spot> SpotArray(n_spots);
+
+// 		make_spot_array(spots, SpotArray);
+
+// 		beam_obj.n_energies = n_energies;
+// 		beam_obj.layers = LayerArray.get();
+// 		beam_obj.spots = SpotArray.get();
+// 		beam_obj.n_spots = n_spots;
+// 		beam_obj.divergence_params = pyarray_as<float>(lut_divergence_params);
+// 		beam_obj.dvp_len = 5;	// R80, energy, quadratic coefficients
+// 		beam_obj.lut_depths = pyarray_as<float>(lut_depths);
+// 		beam_obj.lut_sigmas = pyarray_as<float>(lut_sigmas);
+// 		beam_obj.lut_idds = pyarray_as<float>(lut_idds);
+// 		beam_obj.lut_len = LUT_LENGTH;	// This can now be changed at runtime
+
+// 		beam_obj.importLayers();
+
+// 		proton_spot_cuda(gpu_id, &dose_obj, &beam_obj);
+
+// 		PyObject *return_dose = PyArray_SimpleNewFromData(3, PyArray_DIMS(wet_array), PyArray_TYPE(wet_array), DoseArray.release());
+
+// 		PyArray_ENABLEFLAGS((PyArrayObject*) return_dose, NPY_ARRAY_OWNDATA);
+
+// 		return return_dose;
+
+// 	} catch (std::bad_alloc &) {
+
+// 		PyErr_SetString(PyExc_MemoryError, "Not enough host memory");
+
+// 	} catch (std::runtime_error &e) {
+
+// 		PyErr_Format(PyExc_RuntimeError, "CUDA error: %s", e.what());
+
+// 	}
+
+// 	return NULL;
+
+// }
 
 
 static PyObject * photon_dose(PyObject* self, PyObject* args) {

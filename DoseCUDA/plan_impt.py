@@ -65,7 +65,11 @@ class IMPTBeamModel():
                 divergence_params = [float(part) for part in parts]
                 f.readline() # blank
                 f.readline() # header
+                k = 0 
                 for line in f:
+                    if k > 399:
+                        break
+                    k += 1
                     parts = line.split(",")
                     lut_depths.append(float(parts[0]))
                     lut_sigmas.append(float(parts[1]))
@@ -81,9 +85,9 @@ class IMPTBeamModel():
         self.lut_sigmas = np.array(self.lut_sigmas, dtype=np.single)
         self.lut_idds = np.array(self.lut_idds, dtype=np.single)
 
-        self.lut_depths = self.lut_depths[:, 0:400]
-        self.lut_sigmas = self.lut_sigmas[:, 0:400]
-        self.lut_idds = self.lut_idds[:, 0:400]
+        # self.lut_depths = self.lut_depths[:, 0:399]
+        # self.lut_sigmas = self.lut_sigmas[:, 0:399]
+        # self.lut_idds = self.lut_idds[:, 0:399]
 
     def energyIDFromLabel(self, energy_label):
 
@@ -144,20 +148,21 @@ class IMPTDoseGrid(DoseGrid):
             wet_object.origin = np.array(self.origin, dtype=np.single)
             wet_object.spacing = np.array(self.spacing, dtype=np.single)
 
-            # beam_dose = dose_kernels.proton_spot_cuda(beam_model, rlsp_object, wet_object, beam, gpu_id)
+            beam_dose = dose_kernels.proton_spot_cuda(beam_model, rlsp_object, wet_object, beam, gpu_id)
 
-            beam_dose = dose_kernels.proton_spot_cuda(np.array(beam_wet, dtype=np.single),
-                                                    np.array(self.RLSP, dtype=np.single),
-                                                    np.array(beam.iso - self.origin, dtype=np.single), 
-                                                    beam.gantry_angle, 
-                                                    beam.couch_angle, 
-                                                    np.array(beam.spot_list, dtype=np.single),
-                                                    self.spacing[0], 
-                                                    np.array(beam_model.lut_depths, dtype=np.single), 
-                                                    np.array(beam_model.lut_sigmas,dtype=np.single),
-                                                    np.array(beam_model.lut_idds, dtype=np.single),
-                                                    np.array(beam_model.divergence_params, dtype=np.single),
-                                                    gpu_id)
+            # beam_dose = dose_kernels.proton_spot_cuda(beam_model, rlsp_object, wet_object, beam,
+            #     np.array(beam_wet, dtype=np.single),
+            #     np.array(self.RLSP, dtype=np.single),
+            #     np.array(beam.iso - self.origin, dtype=np.single), 
+            #     beam.gantry_angle, 
+            #     beam.couch_angle, 
+            #     np.array(beam.spot_list, dtype=np.single),
+            #     self.spacing[0], 
+            #     np.array(beam_model.lut_depths, dtype=np.single), 
+            #     np.array(beam_model.lut_sigmas,dtype=np.single),
+            #     np.array(beam_model.lut_idds, dtype=np.single),
+            #     np.array(beam_model.divergence_params, dtype=np.single),
+            #     gpu_id)
 
             self.beam_doses.append(beam_dose * plan.n_fractions)
             self.dose += beam_dose
