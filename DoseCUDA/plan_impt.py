@@ -150,20 +150,6 @@ class IMPTDoseGrid(DoseGrid):
 
             beam_dose = dose_kernels.proton_spot_cuda(beam_model, rlsp_object, wet_object, beam, gpu_id)
 
-            # beam_dose = dose_kernels.proton_spot_cuda(beam_model, rlsp_object, wet_object, beam,
-            #     np.array(beam_wet, dtype=np.single),
-            #     np.array(self.RLSP, dtype=np.single),
-            #     np.array(beam.iso - self.origin, dtype=np.single), 
-            #     beam.gantry_angle, 
-            #     beam.couch_angle, 
-            #     np.array(beam.spot_list, dtype=np.single),
-            #     self.spacing[0], 
-            #     np.array(beam_model.lut_depths, dtype=np.single), 
-            #     np.array(beam_model.lut_sigmas,dtype=np.single),
-            #     np.array(beam_model.lut_idds, dtype=np.single),
-            #     np.array(beam_model.divergence_params, dtype=np.single),
-            #     gpu_id)
-
             self.beam_doses.append(beam_dose * plan.n_fractions)
             self.dose += beam_dose
 
@@ -235,73 +221,6 @@ class IMPTPlan(Plan):
         self.beam_models = []
         for d,f in zip(self.dicom_rangeshifter_label, self.folder_rangeshifter_label):
             self.beam_models.append(IMPTBeamModel(d, os.path.join("lookuptables", "protons", machine_name), f))
-
-        # self.lut_depths = []
-        # self.lut_sigmas = []
-        # self.lut_idds = []
-        # self.divergence_params = []
-        # energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", machine_name, "RS0", "energies.csv"))
-        # self.energy_table = pd.read_csv(energy_list_path)
-        # self.energy_labels = []
-        # self.loadLUT()
-
-    # def loadLUT(self):
-
-    #     energy_list_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "RS0", "energies.csv"))
-    #     self.energy_table = pd.read_csv(energy_list_path)
-
-    #     self.energy_labels = self.energy_table["energy_label"].to_numpy()
-    #     energy_ids = self.energy_table["index"].to_numpy()
-
-    #     self.divergence_params = []
-    #     self.lut_depths = []
-    #     self.lut_sigmas = []
-    #     self.lut_idds = []
-
-    #     for energy_label, energy_id in zip(self.energy_labels, energy_ids):
-
-    #         lut_depths = []
-    #         lut_sigmas = []
-    #         lut_idds = []
-    #         divergence_params = []
-            
-    #         lut_path = pkg_resources.resource_filename(__name__, os.path.join("lookuptables", "protons", self.machine_name, "RS0", "energy_%03d.csv" % energy_id))
-
-    #         with open(lut_path, "r") as f:
-    #             f.readline() # header
-    #             line = f.readline()
-    #             parts = line.split(",")
-    #             divergence_params = [float(part) for part in parts]
-    #             f.readline() # blank
-    #             f.readline() # header
-    #             for line in f:
-    #                 parts = line.split(",")
-    #                 lut_depths.append(float(parts[0]))
-    #                 lut_sigmas.append(float(parts[1]))
-    #                 lut_idds.append(float(parts[2]))
-            
-    #         self.divergence_params.append(divergence_params)    
-    #         self.lut_depths.append(lut_depths)
-    #         self.lut_sigmas.append(lut_sigmas)
-    #         self.lut_idds.append(lut_idds)
-
-    #     self.divergence_params = np.array(self.divergence_params, dtype=np.single)
-    #     self.lut_depths = np.array(self.lut_depths, dtype=np.single)
-    #     self.lut_sigmas = np.array(self.lut_sigmas, dtype=np.single)
-    #     self.lut_idds = np.array(self.lut_idds, dtype=np.single)
-
-    #     self.lut_depths = self.lut_depths[:, 0:400]
-    #     self.lut_sigmas = self.lut_sigmas[:, 0:400]
-    #     self.lut_idds = self.lut_idds[:, 0:400]
-
-    # def energyIDFromLabel(self, energy_label):
-
-        # energy_row = self.energy_table[self.energy_table["energy_label"] == energy_label]
-
-        # if len(energy_row) != 1:
-        #     raise Exception("Energy ID not found for %.2f" % energy_label)
-
-        # return energy_row.index[0]
 
     def readPlanDicom(self, plan_path):
 
