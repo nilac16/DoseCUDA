@@ -236,8 +236,10 @@ class IMPTPlan(Plan):
             
             beam = IMPTBeam()
 
-            if ibs.RangeShifterSequence and ibs.RangeShifterSequence[0].RangeShifterID is not None:
+            if ibs.NumberOfRangeShifters and ibs.RangeShifterSequence[0].RangeShifterID is not None:
                 beam.dicom_rangeshifter_label = ibs.RangeShifterSequence[0].RangeShifterID
+            else:
+                beam.dicom_rangeshifter_label = '0'
 
             beam.gantry_angle = float(ibs.IonControlPointSequence[0].GantryAngle)
             beam.couch_angle = float(ibs.IonControlPointSequence[0].PatientSupportAngle)
