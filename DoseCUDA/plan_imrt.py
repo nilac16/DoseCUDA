@@ -320,8 +320,6 @@ class IMRTPlan(Plan):
         for d,f in zip(self.dicom_energy_label, self.folder_energy_label):
             self.beam_models.append(IMRTBeamModel(d, os.path.join("lookuptables", "photons", machine_name), f))
 
-        # self.beam_model = IMRTBeamModel(os.path.join("lookuptables", "photons", machine_name))
-
     def readPlanDicom(self, plan_path):
 
         ds = pyd.dcmread(plan_path)
