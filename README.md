@@ -3,7 +3,7 @@
 **NOT FOR CLINICAL USE**
 
 **License**
-This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-2.0 License - see the [LICENSE](LICENSE) file for details.
 
 **Reference**
 Bhattacharya M, Reamy C, Li H, Lee J, Hrinivich WT. "A Python package for fast GPU-based proton pencil beam dose calculation." The Journal of Applied Clinical Medical Physics. (In Press) 2025
