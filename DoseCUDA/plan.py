@@ -58,6 +58,7 @@ class DoseGrid:
                   int(self.size[0] * self.spacing[2] / sp_new[2]))
         rf.SetOutputSpacing(sp_new)
         rf.SetSize(sz_new)
+        rf.SetDefaultPixelValue(-1000)
 
         HU_resampled = rf.Execute(HU_img)
         self.HU = np.array(sitk.GetArrayFromImage(HU_resampled), dtype=np.single)
@@ -82,6 +83,7 @@ class DoseGrid:
 
         rf = sitk.ResampleImageFilter()
         rf.SetReferenceImage(ref_dose_img)
+        rf.SetDefaultPixelValue(-1000)
 
         HU_resampled = rf.Execute(HU_img)
 

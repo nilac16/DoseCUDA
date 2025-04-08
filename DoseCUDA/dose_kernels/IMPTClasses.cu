@@ -62,6 +62,8 @@ __host__ void IMPTBeam::importLayers(){
 		spot_start += spot_count;
 	}
 
+	// printf("%d layers in beam.\n", this->n_layers);
+
 }
 
 __device__ void IMPTBeam::interpolateProtonLUT(float wet, float * idd, float * sigma, size_t layer_id){

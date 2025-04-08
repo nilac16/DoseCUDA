@@ -160,17 +160,23 @@ class IMPTDoseGrid(DoseGrid):
         if not wet_path.endswith(".nrrd"):
             raise Exception("WET path must have .nrrd extension")
 
-        self.RLSP = self.RLSPFromHU()
+        self.RLSP = self.RLSPFromHU(plan.machine_name)
         fw = sitk.ImageFileWriter()
 
-        for i, beam in enumerate(plan.beam_list):
+        rlsp_object = VolumeObject()
+        rlsp_object.voxel_data = np.array(self.RLSP, dtype=np.single)
+        rlsp_object.origin = np.array(self.origin, dtype=np.single)
+        rlsp_object.spacing = np.array(self.spacing, dtype=np.single)
 
-            beam_wet = dose_kernels.proton_raytrace_cuda(self.RLSP, 
-                                                         np.array(beam.iso - self.origin, dtype=np.single), 
-                                                         beam.gantry_angle, 
-                                                         beam.couch_angle, 
-                                                         self.spacing[0], 
-                                                         gpu_id)
+        for i, beam in enumerate(plan.beam_list):
+            try:           
+                model_index = list(plan.dicom_rangeshifter_label.astype(str)).index(beam.dicom_rangeshifter_label)
+            except ValueError:
+                print("Beam model not found for rangeshifter ID %s" % beam.dicom_rangeshifter_label)
+                sys.exit(1)
+            beam_model = plan.beam_models[model_index]
+
+            beam_wet = dose_kernels.proton_raytrace_cuda(beam_model, rlsp_object, beam, gpu_id)
 
             HU_img = sitk.GetImageFromArray(beam_wet)
             HU_img.SetOrigin(self.origin)
