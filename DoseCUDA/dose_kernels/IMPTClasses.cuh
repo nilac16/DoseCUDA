@@ -57,11 +57,11 @@ class IMPTBeam : public CudaBeam{
 
         __host__ void importLayers();
 
-        __device__ void interpolateProtonLUT(float wet, float * idd, float * sigma, size_t layer_id);
+        __device__ void interpolateProtonLUT(float wet, float * idd, float * sigma, unsigned layer_id);
 
-        __device__ float sigmaAir(float wet, float distance_to_source, size_t layer_id);
+        __device__ float sigmaAir(float wet, float distance_to_source, unsigned layer_id);
 
-        __device__ void nuclearHalo(const float wet, float * halo_sigma, float * halo_weight, size_t layer_id);
+        __device__ void nuclearHalo(const float wet, float * halo_sigma, float * halo_weight, unsigned layer_id);
 
         /** @brief Compute the @b squared distance of voxel coordinates to their
          *      nearest point on a pencil beam

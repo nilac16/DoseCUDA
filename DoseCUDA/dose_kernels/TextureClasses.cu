@@ -11,7 +11,7 @@ void Texture3D::makeArray(const PointIJK &size)
 }
 
 
-void Texture3D::makeTexture(cudaTextureFilterMode filterMode)
+void Texture3D::makeTexture(cudaTextureFilterMode filterMode, float border)
 {
     cudaResourceDesc rsdesc{ };
     cudaTextureDesc txdesc{ };
@@ -19,13 +19,13 @@ void Texture3D::makeTexture(cudaTextureFilterMode filterMode)
     rsdesc.resType = cudaResourceTypeArray;
     rsdesc.res.array.array = m_arr;
 
-    txdesc.addressMode[0]               = cudaAddressModeClamp;
-    txdesc.addressMode[1]               = cudaAddressModeClamp;
-    txdesc.addressMode[2]               = cudaAddressModeClamp;
+    txdesc.addressMode[0]               = cudaAddressModeBorder;
+    txdesc.addressMode[1]               = cudaAddressModeBorder;
+    txdesc.addressMode[2]               = cudaAddressModeBorder;
     txdesc.filterMode                   = filterMode;
     txdesc.readMode                     = cudaReadModeElementType;
     txdesc.sRGB                         = false;
-    txdesc.borderColor[0]               = 0.0f;
+    txdesc.borderColor[0]               = border;
     txdesc.borderColor[1]               = 0.0f;
     txdesc.borderColor[2]               = 0.0f;
     txdesc.borderColor[3]               = 0.0f;
@@ -41,7 +41,7 @@ void Texture3D::makeTexture(cudaTextureFilterMode filterMode)
 }
 
 
-Texture3D::Texture3D(const float data[], const PointIJK &size, cudaTextureFilterMode filterMode, cudaMemcpyKind direction):
+Texture3D::Texture3D(const float data[], const PointIJK &size, cudaTextureFilterMode filterMode, float border, cudaMemcpyKind direction):
     m_arr(NULL),
     m_tex(0),
     m_isCopy(false)
@@ -55,7 +55,7 @@ Texture3D::Texture3D(const float data[], const PointIJK &size, cudaTextureFilter
     params.kind     = direction;
     CUDA_CHECK(cudaMemcpy3D(&params));
 
-    this->makeTexture(filterMode);
+    this->makeTexture(filterMode, border);
 }
 
 

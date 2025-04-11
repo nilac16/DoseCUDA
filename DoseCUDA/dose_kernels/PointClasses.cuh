@@ -5,9 +5,9 @@
 
 typedef struct {
 
-    size_t i;
-    size_t j;
-    size_t k;
+    unsigned i;
+    unsigned j;
+    unsigned k;
 
 } PointIJK;
 

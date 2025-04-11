@@ -211,10 +211,10 @@ __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D Densi
 
 	PointXYZ vox_ray_xyz, tex_xyz;
 
-    float ray_length = 0.0;
-    float wet_sum = -0.05;
-    float density = 0.0;
-	const float step_length = 1.0;
+    float ray_length = 0.0f;
+    float wet_sum = -0.05f;
+    float density = 0.0f;
+	const float step_length = 1.0f;
 
     while(true){
 
@@ -228,7 +228,7 @@ __global__ void rayTraceKernel(CudaDose * dose, CudaBeam * beam, Texture3D Densi
 		}
 		density = DensityTexture.sample(tex_xyz);
 
-		wet_sum = fmaf(fmaxf(density, 0.0), step_length / 10.0, wet_sum);
+		wet_sum = fmaf(fmaxf(density, 0.0f), step_length / 10.0f, wet_sum);
 
 		ray_length += step_length;
 
