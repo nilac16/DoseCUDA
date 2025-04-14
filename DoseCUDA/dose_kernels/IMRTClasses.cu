@@ -268,9 +268,13 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 		for(int j = 0; j < 12; j++){
 
-			float xr = sinth * trig[j].cosx;
-			float yr = sinth * trig[j].sinx;
-			float zr = costh;
+			PointXYZ tangent_head_xyz;
+			tangent_head_xyz.x = sinth * trig[j].cosx;
+			tangent_head_xyz.y = sinth * trig[j].sinx;
+			tangent_head_xyz.z = costh;
+
+			PointXYZ tangent_img_xyz;
+			beam->pointXYZHeadToImage(&tangent_head_xyz, &tangent_img_xyz);
 
 			float Rs = 0.0f, Rp = 0.0f, Ti = 0.0f;
 			float Di = AIR_DENSITY * sp;
@@ -278,13 +282,10 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 			while(ray_length >= 0.0f) {
 
-				PointXYZ ray_head_xyz;
-				ray_head_xyz.x = fmaf(xr, ray_length * 10.0f, vox_head_xyz.x);
-				ray_head_xyz.y = fmaf(yr, ray_length * 10.0f, vox_head_xyz.y);
-				ray_head_xyz.z = fmaf(zr, ray_length * 10.0f, vox_head_xyz.z);
-
 				PointXYZ ray_img_xyz;
-				beam->pointXYZHeadToImage(&ray_head_xyz, &ray_img_xyz);
+				ray_img_xyz.x = fmaf(tangent_img_xyz.x, ray_length * 10.0f, vox_img_xyz.x);
+				ray_img_xyz.y = fmaf(tangent_img_xyz.y, ray_length * 10.0f, vox_img_xyz.y);
+				ray_img_xyz.z = fmaf(tangent_img_xyz.z, ray_length * 10.0f, vox_img_xyz.z);
 
 				dose->pointXYZtoTextureXYZ(&ray_img_xyz, &tex_img_xyz, beam);
 				Ti = TERMATexture.sample(tex_img_xyz);
