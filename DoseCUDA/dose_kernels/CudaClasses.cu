@@ -50,19 +50,6 @@ __host__ CudaBeam::CudaBeam(float * iso, float gantry_angle, float couch_angle, 
 
 }
 
-__device__ void CudaBeam::unitVectorToSource(const PointXYZ * point_xyz, PointXYZ * uvec) {
-
-	float dx = this->src.x - point_xyz->x;
-	float dy = this->src.y - point_xyz->y;
-	float dz = this->src.z - point_xyz->z;
-
-	float r = rnorm3df(dx, dy, dz);
-
-	uvec->x = dx * r;
-	uvec->y = dy * r;
-	uvec->z = dz * r;
-}
-
 __device__ float CudaBeam::distanceToSource(const PointXYZ * point_xyz){
 	
 	float dx = this->src.x - point_xyz->x;

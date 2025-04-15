@@ -38,7 +38,18 @@ class CudaBeam{
         __host__ CudaBeam(CudaBeam * h_beam);
         __host__ CudaBeam(float * iso, float gantry_angle, float couch_angle, float src_dist);
 
-        __device__ void unitVectorToSource(const PointXYZ * point_xyz, PointXYZ * uvec);
+        __device__ void unitVectorToSource(const PointXYZ * point_xyz, PointXYZ * uvec) {
+
+            uvec->x = this->src.x - point_xyz->x;
+            uvec->y = this->src.y - point_xyz->y;
+            uvec->z = this->src.z - point_xyz->z;
+
+            const auto norm = rnorm3df(uvec->x, uvec->y, uvec->z);
+            uvec->x *= norm;
+            uvec->y *= norm;
+            uvec->z *= norm;
+
+        }
 
         __device__ float distanceToSource(const PointXYZ * point_xyz);
 
