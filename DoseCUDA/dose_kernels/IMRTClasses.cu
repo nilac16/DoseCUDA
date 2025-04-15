@@ -170,6 +170,38 @@ __device__ void IMRTBeam::offAxisFactors(const PointXYZ * point_xyz, float * off
 
 }
 
+__device__ void IMRTBeam::kernelTilt(const PointXYZ * vox_img_xyz, PointXYZ * vec_img) {
+
+	PointXYZ uvec;
+	this->unitVectorToSource(vox_img_xyz, &uvec);
+
+	/* Compute z in the img tangent space as the unit vector from iso to source */
+	PointXYZ axis{ };
+	this->unitVectorToSource(&axis, &axis);
+
+	/* Cosine of the tilt angle θ */
+	auto costh = xyz_dotproduct(axis, uvec);
+
+	/* Tilt axis, scaled by sin(θ) */
+	axis = xyz_crossproduct(axis, uvec);
+
+	/* Rodrigues' formula (second term first) */
+	auto result = xyz_crossproduct(axis, *vec_img);
+
+	/* First term */
+	result.x += vec_img->x * costh;
+	result.y += vec_img->y * costh;
+	result.z += vec_img->z * costh;
+
+	/* Last term */
+	auto scal = xyz_dotproduct(axis, *vec_img) / (1.0f + costh);
+	result.x += axis.x * scal;
+	result.y += axis.y * scal;
+	result.z += axis.z * scal;
+
+	*vec_img = result;
+}
+
 
 __host__ IMRTDose::IMRTDose(CudaDose * h_dose) : CudaDose(h_dose) {}
 
@@ -275,6 +307,7 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 			PointXYZ tangent_img_xyz;
 			beam->pointXYZHeadToImage(&tangent_head_xyz, &tangent_img_xyz);
+			beam->kernelTilt(&vox_img_xyz, &tangent_img_xyz);
 
 			float Rs = 0.0f, Rp = 0.0f, Ti = 0.0f;
 			float Di = AIR_DENSITY * sp;
