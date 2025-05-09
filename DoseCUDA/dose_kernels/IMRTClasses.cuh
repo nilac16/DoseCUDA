@@ -71,6 +71,9 @@ class IMRTBeam : public CudaBeam{
 
 		__device__ void offAxisFactors(const PointXYZ * point_xyz, float * off_axis_factor, float * off_axis_softening);
 
+        /** Tilt an IMAGE-space tangent vector such that its z points toward the source */
+        __device__ void kernelTilt(const PointXYZ * vox_img_xyz, PointXYZ * vec_img);
+
 		/** Takes collimator angle into account */
 		__device__ void pointXYZImageToHead(const PointXYZ * point_img, PointXYZ * point_head);
 

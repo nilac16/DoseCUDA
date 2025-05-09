@@ -170,6 +170,38 @@ __device__ void IMRTBeam::offAxisFactors(const PointXYZ * point_xyz, float * off
 
 }
 
+__device__ void IMRTBeam::kernelTilt(const PointXYZ * vox_img_xyz, PointXYZ * vec_img) {
+
+	PointXYZ uvec;
+	this->unitVectorToSource(vox_img_xyz, &uvec);
+
+	/* Compute z in the img tangent space as the unit vector from iso to source */
+	PointXYZ axis{ };
+	this->unitVectorToSource(&axis, &axis);
+
+	/* Cosine of the tilt angle θ */
+	auto costh = xyz_dotproduct(axis, uvec);
+
+	/* Tilt axis, scaled by sin(θ) */
+	axis = xyz_crossproduct(axis, uvec);
+
+	/* Rodrigues' formula (second term first) */
+	auto result = xyz_crossproduct(axis, *vec_img);
+
+	/* First term */
+	result.x += vec_img->x * costh;
+	result.y += vec_img->y * costh;
+	result.z += vec_img->z * costh;
+
+	/* Last term */
+	auto scal = xyz_dotproduct(axis, *vec_img) / (1.0f + costh);
+	result.x += axis.x * scal;
+	result.y += axis.y * scal;
+	result.z += axis.z * scal;
+
+	*vec_img = result;
+}
+
 
 __host__ IMRTDose::IMRTDose(CudaDose * h_dose) : CudaDose(h_dose) {}
 
@@ -268,9 +300,14 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 		for(int j = 0; j < 12; j++){
 
-			float xr = sinth * trig[j].cosx;
-			float yr = sinth * trig[j].sinx;
-			float zr = costh;
+			PointXYZ tangent_head_xyz;
+			tangent_head_xyz.x = sinth * trig[j].cosx;
+			tangent_head_xyz.y = sinth * trig[j].sinx;
+			tangent_head_xyz.z = costh;
+
+			PointXYZ tangent_img_xyz;
+			beam->pointXYZHeadToImage(&tangent_head_xyz, &tangent_img_xyz);
+			beam->kernelTilt(&vox_img_xyz, &tangent_img_xyz);
 
 			float Rs = 0.0f, Rp = 0.0f, Ti = 0.0f;
 			float Di = AIR_DENSITY * sp;
@@ -278,13 +315,10 @@ __global__ void cccKernel(IMRTDose * dose, IMRTBeam * beam, Texture3D TERMATextu
 
 			while(ray_length >= 0.0f) {
 
-				PointXYZ ray_head_xyz;
-				ray_head_xyz.x = fmaf(xr, ray_length * 10.0f, vox_head_xyz.x);
-				ray_head_xyz.y = fmaf(yr, ray_length * 10.0f, vox_head_xyz.y);
-				ray_head_xyz.z = fmaf(zr, ray_length * 10.0f, vox_head_xyz.z);
-
 				PointXYZ ray_img_xyz;
-				beam->pointXYZHeadToImage(&ray_head_xyz, &ray_img_xyz);
+				ray_img_xyz.x = fmaf(tangent_img_xyz.x, ray_length * 10.0f, vox_img_xyz.x);
+				ray_img_xyz.y = fmaf(tangent_img_xyz.y, ray_length * 10.0f, vox_img_xyz.y);
+				ray_img_xyz.z = fmaf(tangent_img_xyz.z, ray_length * 10.0f, vox_img_xyz.z);
 
 				dose->pointXYZtoTextureXYZ(&ray_img_xyz, &tex_img_xyz, beam);
 				Ti = TERMATexture.sample(tex_img_xyz);
