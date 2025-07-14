@@ -7,29 +7,13 @@ import pandas as pd
 import pydicom as pyd
 import pkg_resources
 import dose_kernels
+from dataclasses import dataclass
 
+@dataclass
+class IMRTPhotonEnergy:
 
-class IMRTBeamModel:
-
-    def __init__(self, dicom_energy_label, path_to_model, folder_energy_label):
-        
+    def __init__(self, dicom_energy_label):
         self.dicom_energy_label = dicom_energy_label
-
-        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "mlc_geometry.csv"))
-        mlc_geometry = pd.read_csv(mlc_geometry_path)
-
-        self.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
-        self.mlc_widths = mlc_geometry["width"].to_numpy()
-        self.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
-        self.n_mlc_pairs = len(self.mlc_index)
-
-        kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "kernel.csv"))
-        kernel = pd.read_csv(kernel_path)
-        self.kernel = np.array(kernel.to_numpy(), dtype=np.single)
-
-        machine_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_geometry.csv"))
-        beam_parameter_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "beam_parameters.csv"))
-
         self.output_factor_equivalent_squares = None
         self.output_factor_values = None
         self.mu_calibration = None
@@ -52,144 +36,27 @@ class IMRTBeamModel:
         self.electron_fitted_dmax = None
         self.jaw_transmission = None
         self.mlc_transmission = None
+        self.mlc_index = None
+        self.mlc_widths = None
+        self.mlc_offsets = None
+        self.n_mlc_pairs = None
+        self.kernel = None
 
-        for line in open(machine_geometry_path):
-
-            if line.startswith('primary_source_distance'):
-                self.primary_source_distance = float(line.split(',')[1])
-
-            if line.startswith('scatter_source_distance'):
-                self.scatter_source_distance = float(line.split(',')[1])
-
-            if line.startswith('mlc_distance'):
-                self.mlc_distance = float(line.split(',')[1])
-
-            if line.startswith('has_xjaws'):
-                self.has_xjaws = bool(line.split(',')[1])
-
-            if line.startswith('has_yjaws'):
-                self.has_yjaws = bool(line.split(',')[1])
-
-
-        for line in open(beam_parameter_path):
-
-            if line.startswith('output_factor_equivalent_squares'):
-                self.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('output_factor_values'):
-                self.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('mu_calibration'):
-                self.mu_calibration = float(line.split(',')[1])
-
-            if line.startswith('scatter_source_weight'):
-                self.scatter_source_weight = float(line.split(',')[1])
-
-            if line.startswith('electron_attenuation'):
-                self.electron_attenuation = float(line.split(',')[1])
-
-            if line.startswith('primary_source_size'):
-                self.primary_source_size = float(line.split(',')[1])
-
-            if line.startswith('scatter_source_size'):
-                self.scatter_source_size = float(line.split(',')[1])
-
-            if line.startswith('profile_radius'):
-                self.profile_radius = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('profile_intensities'):
-                self.profile_intensities = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('profile_softening'):
-                self.profile_softening = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('spectrum_attenuation_coefficients'):
-                self.spectrum_attenuation_coefficients = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('spectrum_primary_weights'):
-                self.spectrum_primary_weights = np.array(line.split(',')[1:], dtype=np.single)
-
-            if line.startswith('spectrum_scatter_weights'):
-                self.spectrum_scatter_weights = np.array(line.split(',')[1:], dtype=np.single)
-            
-            if line.startswith('electron_source_weight'):
-                self.electron_source_weight = float(line.split(',')[1])
-
-            if line.startswith('electron_fitted_dmax'):
-                self.electron_fitted_dmax = float(line.split(',')[1])
-
-            if line.startswith('jaw_transmission'):
-                self.jaw_transmission = float(line.split(',')[1])
-
-            if line.startswith('mlc_transmission'):
-                self.mlc_transmission = float(line.split(',')[1])
-
-
-        if self.output_factor_equivalent_squares is None:
-            raise Exception("output_factor_equivalent_squares not found in machine_parameters.csv")
+    def validate_parameters(self):
+        """Validate that all required parameters are set"""
+        required_params = [
+            'output_factor_equivalent_squares', 'output_factor_values', 'mu_calibration',
+            'primary_source_distance', 'scatter_source_distance', 'mlc_distance',
+            'scatter_source_weight', 'electron_attenuation', 'primary_source_size',
+            'scatter_source_size', 'profile_radius', 'profile_intensities',
+            'profile_softening', 'spectrum_attenuation_coefficients', 'spectrum_primary_weights',
+            'spectrum_scatter_weights', 'electron_source_weight', 'has_xjaws', 'has_yjaws',
+            'electron_fitted_dmax', 'jaw_transmission', 'mlc_transmission'
+        ]
         
-        if self.output_factor_values is None:
-            raise Exception("output_factor_values not found in machine_parameters.csv")
-        
-        if self.mu_calibration is None:
-            raise Exception("mu_calibration not found in machine_parameters.csv")
-
-        if self.primary_source_distance is None:
-            raise Exception("primary_source_distance not found in machine_parameters.csv")
-        
-        if self.scatter_source_distance is None:
-            raise Exception("scatter_source_distance not found in machine_parameters.csv")
-        
-        if self.mlc_distance is None:
-            raise Exception("mlc_distance not found in machine_parameters.csv")
-        
-        if self.scatter_source_weight is None:
-            raise Exception("scatter_source_weight not found in machine_parameters.csv")
-        
-        if self.electron_attenuation is None:
-            raise Exception("electron_mass_attenuation_coefficient not found in machine_parameters.csv")
-        
-        if self.primary_source_size is None:
-            raise Exception("primary_source_size not found in machine_parameters.csv")
-        
-        if self.scatter_source_size is None:
-            raise Exception("scatter_source_size not found in machine_parameters.csv")
-        
-        if self.profile_radius is None:
-            raise Exception("profile_radius not found in machine_parameters.csv")
-        
-        if self.profile_intensities is None:
-            raise Exception("profile_intensities not found in machine_parameters.csv")
-        
-        if self.profile_softening is None:
-            raise Exception("profile_softening not found in machine_parameters.csv")
-        
-        if self.spectrum_attenuation_coefficients is None:
-            raise Exception("spectrum_attenuation_coefficients not found in machine_parameters.csv")
-        
-        if self.spectrum_primary_weights is None:
-            raise Exception("spectrum_primary_weights not found in machine_parameters.csv")
-        
-        if self.spectrum_scatter_weights is None:
-            raise Exception("spectrum_scatter_weights not found in machine_parameters.csv")
-        
-        if self.electron_source_weight is None:
-            raise Exception("electron_source_weight not found in machine_parameters.csv")
-        
-        if self.has_xjaws is None:
-            raise Exception("has_xjaws not found in machine_parameters.csv")
-        
-        if self.has_yjaws is None:
-            raise Exception("has_yjaws not found in machine_parameters.csv")
-        
-        if self.electron_fitted_dmax is None:
-            raise Exception("electron_fitted_dmax not found in machine_parameters.csv")
-        
-        if self.jaw_transmission is None:
-            raise Exception("jaw_transmission not found in machine_parameters.csv")
-        
-        if self.mlc_transmission is None:
-            raise Exception("mlc_transmission not found in machine_parameters.csv")
+        for param in required_params:
+            if getattr(self, param) is None:
+                raise Exception(f"{param} not set in beam model")
         
     def outputFactor(self, cp):
     
@@ -317,8 +184,91 @@ class IMRTPlan(Plan):
         self.folder_energy_label = energy_list["folder_energy_label"]
 
         self.beam_models = []
-        for d,f in zip(self.dicom_energy_label, self.folder_energy_label):
-            self.beam_models.append(IMRTBeamModel(d, os.path.join("lookuptables", "photons", machine_name), f))
+        for d, f in zip(self.dicom_energy_label, self.folder_energy_label):
+            beam_model = IMRTPhotonEnergy(d)
+            self._load_beam_model_parameters(beam_model, machine_name, f)
+            self.beam_models.append(beam_model)
+
+    def _load_beam_model_parameters(self, beam_model, machine_name, folder_energy_label):
+        """Load beam model parameters from lookup tables"""
+        path_to_model = os.path.join("lookuptables", "photons", machine_name)
+        
+        # Load MLC geometry
+        mlc_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "mlc_geometry.csv"))
+        mlc_geometry = pd.read_csv(mlc_geometry_path)
+        
+        beam_model.mlc_index = mlc_geometry["mlc_pair_index"].to_numpy()
+        beam_model.mlc_widths = mlc_geometry["width"].to_numpy()
+        beam_model.mlc_offsets = mlc_geometry["center_offset"].to_numpy()
+        beam_model.n_mlc_pairs = len(beam_model.mlc_index)
+
+        # Load kernel
+        kernel_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "kernel.csv"))
+        kernel = pd.read_csv(kernel_path)
+        beam_model.kernel = np.array(kernel.to_numpy(), dtype=np.single)
+
+        # Load machine geometry
+        machine_geometry_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, "machine_geometry.csv"))
+        self._load_machine_geometry(beam_model, machine_geometry_path)
+
+        # Load beam parameters
+        beam_parameter_path = pkg_resources.resource_filename(__name__, os.path.join(path_to_model, folder_energy_label, "beam_parameters.csv"))
+        self._load_beam_parameters(beam_model, beam_parameter_path)
+
+        # Validate all parameters are loaded
+        beam_model.validate_parameters()
+
+    def _load_machine_geometry(self, beam_model, machine_geometry_path):
+        """Load machine geometry parameters"""
+        for line in open(machine_geometry_path):
+            if line.startswith('primary_source_distance'):
+                beam_model.primary_source_distance = float(line.split(',')[1])
+            elif line.startswith('scatter_source_distance'):
+                beam_model.scatter_source_distance = float(line.split(',')[1])
+            elif line.startswith('mlc_distance'):
+                beam_model.mlc_distance = float(line.split(',')[1])
+            elif line.startswith('has_xjaws'):
+                beam_model.has_xjaws = bool(line.split(',')[1])
+            elif line.startswith('has_yjaws'):
+                beam_model.has_yjaws = bool(line.split(',')[1])
+
+    def _load_beam_parameters(self, beam_model, beam_parameter_path):
+        """Load beam-specific parameters"""
+        for line in open(beam_parameter_path):
+            if line.startswith('output_factor_equivalent_squares'):
+                beam_model.output_factor_equivalent_squares = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('output_factor_values'):
+                beam_model.output_factor_values = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('mu_calibration'):
+                beam_model.mu_calibration = float(line.split(',')[1])
+            elif line.startswith('scatter_source_weight'):
+                beam_model.scatter_source_weight = float(line.split(',')[1])
+            elif line.startswith('electron_attenuation'):
+                beam_model.electron_attenuation = float(line.split(',')[1])
+            elif line.startswith('primary_source_size'):
+                beam_model.primary_source_size = float(line.split(',')[1])
+            elif line.startswith('scatter_source_size'):
+                beam_model.scatter_source_size = float(line.split(',')[1])
+            elif line.startswith('profile_radius'):
+                beam_model.profile_radius = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('profile_intensities'):
+                beam_model.profile_intensities = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('profile_softening'):
+                beam_model.profile_softening = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('spectrum_attenuation_coefficients'):
+                beam_model.spectrum_attenuation_coefficients = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('spectrum_primary_weights'):
+                beam_model.spectrum_primary_weights = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('spectrum_scatter_weights'):
+                beam_model.spectrum_scatter_weights = np.array(line.split(',')[1:], dtype=np.single)
+            elif line.startswith('electron_source_weight'):
+                beam_model.electron_source_weight = float(line.split(',')[1])
+            elif line.startswith('electron_fitted_dmax'):
+                beam_model.electron_fitted_dmax = float(line.split(',')[1])
+            elif line.startswith('jaw_transmission'):
+                beam_model.jaw_transmission = float(line.split(',')[1])
+            elif line.startswith('mlc_transmission'):
+                beam_model.mlc_transmission = float(line.split(',')[1])
 
     def readPlanDicom(self, plan_path):
 
@@ -401,6 +351,7 @@ class IMRTPlan(Plan):
                 self.addBeam(imrt_beam)
 
     def addSquareField(self, dicom_energy_label='6', dimx=10, dimy=10, mu=100, gantry_angle=0.0, collimator_angle=0.0, table_angle=0.0):
+    
 
         imrt_beam = IMRTBeam()
         imrt_beam.dicom_energy_label = dicom_energy_label

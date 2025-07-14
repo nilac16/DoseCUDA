@@ -35,6 +35,10 @@ class DoseGrid:
     def loadCTDCM(self, ct_path):
         reader = sitk.ImageSeriesReader()
         dicom_names = reader.GetGDCMSeriesFileNames(ct_path)
+
+        dicom_names = list(dicom_names)
+        dicom_names.sort(key=lambda x: pyd.dcmread(x, force=True).ImagePositionPatient[2])
+
         reader.SetFileNames(dicom_names)
         ct_img = reader.Execute()
 
@@ -42,6 +46,24 @@ class DoseGrid:
         self.spacing = np.array(ct_img.GetSpacing())
         self.HU = np.array(sitk.GetArrayFromImage(ct_img), dtype=np.single)
         self.HU = np.clip(self.HU, -1000.0, None)
+        self.size = np.array(self.HU.shape)
+
+    def resampleCT(self, new_spacing, new_size, new_origin):
+        HU_img = sitk.GetImageFromArray(self.HU)
+        HU_img.SetOrigin(self.origin)
+        HU_img.SetSpacing(self.spacing)
+
+        rf = sitk.ResampleImageFilter()
+        rf.SetOutputOrigin(new_origin)
+        rf.SetOutputSpacing(new_spacing)
+        rf.SetSize(new_size)
+        rf.SetDefaultPixelValue(-1000)
+
+        HU_resampled = rf.Execute(HU_img)
+        self.HU = np.array(sitk.GetArrayFromImage(HU_resampled), dtype=np.single)
+
+        self.origin = new_origin
+        self.spacing = new_spacing
         self.size = np.array(self.HU.shape)
 
     def resampleCTfromSpacing(self, spacing):
@@ -68,7 +90,7 @@ class DoseGrid:
 
     def resampleCTfromReferenceDose(self, ref_dose_path):
 
-        ref_dose = pyd.dcmread(ref_dose_path)
+        ref_dose = pyd.dcmread(ref_dose_path, force=True)
         slice_thickness = float(ref_dose.GridFrameOffsetVector[1]) - float(ref_dose.GridFrameOffsetVector[0])
         ref_spacing = np.array([float(ref_dose.PixelSpacing[0]), float(ref_dose.PixelSpacing[1]), slice_thickness])
         ref_origin = np.array(ref_dose.ImagePositionPatient)
@@ -178,6 +200,18 @@ class DoseGrid:
         HU_img.SetOrigin(self.origin)
         HU_img.SetSpacing(self.spacing)
 
+        fw.SetFileName(ct_path)
+        fw.Execute(HU_img)
+
+    def writeCTNIFTI(self, ct_path):
+        if not ct_path.endswith(".nii.gz"):
+            raise Exception("CT path must have .nii.gz extension")
+
+        HU_img = sitk.GetImageFromArray(self.HU)
+        HU_img.SetOrigin(self.origin)
+        HU_img.SetSpacing(self.spacing)
+
+        fw = sitk.ImageFileWriter()
         fw.SetFileName(ct_path)
         fw.Execute(HU_img)
 
