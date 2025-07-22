@@ -304,7 +304,7 @@ class IMPTPlan(Plan):
         dsets.sort(key=lambda ds: ds.InstanceNumber)
         return dsets
 
-    def writePlanDicom(self, ct_dir, output_file):
+    def writePlanDicom(self, ct_dir, output_file, rt_struct_file = None):
         """Build and save an RT Ion Plan DICOM for a proton pencil-beam scan."""
         # ————————————
         # File Meta Information
@@ -359,17 +359,42 @@ class IMPTPlan(Plan):
         rss.ReferencedSOPInstanceUID = generate_uid()  # Replace with actual if available
 
         # Dose Reference Sequence (for referenced in CPs)
-        ds.DoseReferenceSequence = [Dataset(), Dataset()]
-        for i, dr in enumerate(ds.DoseReferenceSequence):
-            dr.DoseReferenceNumber = i + 1
-            dr.ReferencedROINumber = i + 1
+        if rt_struct_file:
+            rt_ds = pyd.dcmread(rt_struct_file)
+            rss.ReferencedSOPInstanceUID = rt_ds.SOPInstanceUID
+            ptv_roi_num = None
+            for roi in rt_ds.StructureSetROISequence:
+                if roi.ROIName == "PTV":
+                    ptv_roi_num = roi.ROINumber
+                    break
+            if ptv_roi_num is None:
+                raise ValueError("No structure labelled 'PTV' found in the provided RT structure set.")
+
+            # Dose Reference Sequence (reference PTV)
+            ds.DoseReferenceSequence = [Dataset()]
+            dr = ds.DoseReferenceSequence[0]
+            dr.DoseReferenceNumber = 1
+            dr.ReferencedROINumber = ptv_roi_num
             dr.DoseReferenceStructureType = 'VOLUME'
-            dr.DoseReferenceDescription = f'Dose Reference {i + 1}'
+            dr.DoseReferenceDescription = 'PTV Prescription'
             dr.DoseReferenceType = 'TARGET'
-            dr.TargetPrescriptionDose = 60 
+            dr.TargetPrescriptionDose = 60
             dr.TargetUnderdoseVolumeFraction = 2
             dr.add_new((0x4001, 0x0010), 'LO', 'RAYSEARCHLABS 2.0')
             dr.add_new((0x4001, 0x1011), 'UN', '{0}'.format(60).encode())
+        else:
+            # Dose Reference Sequence (for referenced in CPs) - original hardcoded
+            ds.DoseReferenceSequence = [Dataset(), Dataset()]
+            for i, dr in enumerate(ds.DoseReferenceSequence):
+                dr.DoseReferenceNumber = i + 1
+                dr.ReferencedROINumber = i + 1
+                dr.DoseReferenceStructureType = 'VOLUME'
+                dr.DoseReferenceDescription = f'Dose Reference {i + 1}'
+                dr.DoseReferenceType = 'TARGET'
+                dr.TargetPrescriptionDose = 60
+                dr.TargetUnderdoseVolumeFraction = 2
+                dr.add_new((0x4001, 0x0010), 'LO', 'RAYSEARCHLABS 2.0')
+                dr.add_new((0x4001, 0x1011), 'UN', '{0}'.format(60).encode())
 
         # Fraction Group Sequence
         ds.FractionGroupSequence = [Dataset()]
