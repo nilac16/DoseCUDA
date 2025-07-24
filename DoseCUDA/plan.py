@@ -145,7 +145,7 @@ class DoseGrid:
                 ref_dose.ReferencedRTPlanSequence[0].ReferencedSOPInstanceUID = pyd.uid.generate_uid()
 
                 dose_dcm = np.array(beam_dose * 500.0 * RBE, dtype=np.uint16)
-                ref_dose.PixelData = dose_dcm
+                ref_dose.PixelData = dose_dcm.tobytes()
                 ref_dose.DoseGridScaling = 0.002
 
                 ref_dose.save_as(dose_path.replace(".dcm", "_beam%02i.dcm" % (i+1)))
