@@ -307,9 +307,9 @@ class IMPTBeam(Beam):
             self.n_spots = beam.n_spots
             self.dicom_rangeshifter_label = beam.dicom_rangeshifter_label
 
-    def addSpotData(self, cp, energy_id):
+    def addSpotData(self, cp, energy_id, meterset_key = "ScanSpotMetersetWeights"):
 
-        mus = np.array(cp.ScanSpotMetersetWeights)
+        mus = np.array(cp.get(meterset_key))
         if not np.any(mus):
             return
         spm = np.reshape(np.array(cp.ScanSpotPositionMap), (-1, 2))
@@ -678,5 +678,46 @@ class IMPTPlan(Plan):
                 energy_id = self.beam_models[0].energyIDFromLabel(float(cp.NominalBeamEnergy))
 
                 beam.addSpotData(cp, energy_id)
+
+            self.addBeam(beam)
+
+    def readLogPlan(self, rtplan, rtrecords):
+        """Read beam information from log files"""
+        if not isinstance(rtplan, pyd.Dataset):
+            rp = pyd.dcmread(rtplan, force=True)
+        else:
+            rp = rtplan
+
+        for rtrecord, ibs in zip(rtrecords, rp.IonBeamSequence):
+            if not isinstance(rtrecord, pyd.Dataset):
+                log = pyd.dcmread(rtrecord, force=True)
+            else:
+                log = rtrecord
+
+            sesh = log.TreatmentSessionIonBeamSequence[0]
+            if sesh.get("RadiationType") != "PROTON":
+                raise RuntimeError(f"Cannot add beam of type \"{sesh.RadiationType}\"")
+
+            beam = IMPTBeam()
+            if sesh.NumberOfRangeShifters and sesh.RecordedRangeShifterSequence[0].RangeShifterID is not None:
+                beam.dicom_rangeshifter_label = sesh.RecordedRangeShifterSequence[0].RangeShifterID
+            else:
+                beam.dicom_rangeshifter_label = '0'
+
+            cp0 = sesh.IonControlPointDeliverySequence[0]
+            beam.gantry_angle = float(cp0.GantryAngle)
+            beam.couch_angle = float(cp0.PatientSupportAngle)
+
+            cp0 = ibs.IonControlPointSequence[0]
+            beam.iso = np.array(cp0.IsocenterPosition, dtype=np.single)
+
+            beam.BeamName = sesh.BeamName
+            beam.BeamDescription = sesh.get("BeamDescription")
+
+            energy_id = None
+            for cp in sesh.IonControlPointDeliverySequence:
+                if hasattr(cp, "NominalBeamEnergy"):
+                    energy_id = self.beam_models[0].energyIDFromLabel(float(cp.NominalBeamEnergy))
+                beam.addSpotData(cp, energy_id, "ScanSpotMetersetsDelivered")
 
             self.addBeam(beam)
