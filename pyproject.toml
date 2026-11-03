@@ -19,7 +19,7 @@ dependencies = [
     "pydicom",
     "SimpleITK",
     "pandas",
-    "setuptools<81",
+    "setuptools",
 ]
 
 keywords = ["radiation", "oncology", "medical", "proton", "cuda"]
